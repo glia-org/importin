@@ -1,0 +1,33 @@
+[package]
+name = "importin"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+base64 = "0.23.1"
+calamine = "0.38.0"
+chrono = { version = "0.4.45", features = ["serde"] }
+dirs = "7.0.0"
+glob = "0.3.4"
+mail-parser = "1.0.1"
+pdf-extract = "0.12.1"
+plist = "1.10.3"
+quick-xml = "0.42.0"
+rmcp = { version = "3", features = ["server", "macros", "transport-io"] }
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+schemars = "1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["full"] }
+toml = "1.2.0"
+zip = "9.3.0"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
