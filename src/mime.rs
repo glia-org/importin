@@ -251,6 +251,18 @@ impl<'a> Parsed<'a> {
         (der.first() == Some(&0x30)).then_some(der)
     }
 
+    /// The transfer-decoded body of a top-level pkcs7-mime signed-data part, when it is DER.
+    pub fn signed_der(&self) -> Option<Vec<u8>> {
+        let root = self.msg.root_part();
+        if !(is_pkcs7_mime(&mime_type(&root))
+            && smime_type(&root).as_deref() == Some("signed-data"))
+        {
+            return None;
+        }
+        let der = root.decoded().into_owned();
+        (der.first() == Some(&0x30)).then_some(der)
+    }
+
     /// Headers and body of the first child of a top-level `multipart/signed`, as written.
     pub fn signed_first_part(&self) -> Option<&[u8]> {
         let root = self.msg.root_part();

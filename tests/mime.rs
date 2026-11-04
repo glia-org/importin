@@ -436,6 +436,27 @@ Content-Transfer-Encoding: base64\n\nMAMCAQA=\n";
 }
 
 #[test]
+fn signed_der_only_for_opaque_signed() {
+    let raw = b"From: a@example.test\nContent-Type: application/pkcs7-mime; smime-type=signed-data; name=\"smime.p7m\"\n\
+Content-Transfer-Encoding: base64\n\nMAMCAQA=\n";
+    let parsed = mime::parse(raw).unwrap();
+    assert_eq!(parsed.signed_der().unwrap(), [0x30, 0x03, 0x02, 0x01, 0x00]);
+    // Not DER.
+    let raw =
+        b"From: a@example.test\nContent-Type: application/pkcs7-mime; smime-type=signed-data\n\
+Content-Transfer-Encoding: base64\n\naGVsbG8=\n";
+    assert_eq!(mime::parse(raw).unwrap().signed_der(), None);
+    // enveloped-data and multipart/signed are not opaque signed-data.
+    let raw =
+        b"From: a@example.test\nContent-Type: application/pkcs7-mime; smime-type=enveloped-data\n\
+Content-Transfer-Encoding: base64\n\nMAMCAQA=\n";
+    assert_eq!(mime::parse(raw).unwrap().signed_der(), None);
+    let fx = fixture::build(Epoch::Unix);
+    let m = load(&fx, fx.ids.signed_only);
+    assert_eq!(mime::parse(&m.raw).unwrap().signed_der(), None);
+}
+
+#[test]
 fn strip_html_basic() {
     use mime::strip_html;
     assert_eq!(
