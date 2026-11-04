@@ -17,7 +17,7 @@ cargo build --release          # target/release/importin
 cargo test                     # all tests, on a synthetic store built in a temp dir
 checks/budgets.sh              # release build; latency budgets on a 2 000-message fixture
 cargo install --path .         # ~/.cargo/bin/importin
-importin doctor --anon --json  # the real store, numbers and booleans only
+importin doctor --anon --json  # the real store, no account names, paths or addresses
 ```
 
 The tests never touch `~/Library/Mail`: `tests/support/fixture.rs` builds a `Mail/V10` tree and the binary
@@ -28,11 +28,11 @@ smime` on the real keychain (read-only, count only).
 Budgets (DESIGN §2), last measured 2026-11-04 on this Mac (Apple Silicon), release build, 2 000 messages,
 after one warm-up launch:
 
-| measure | budget | measured (3 runs) |
+| measure | budget | measured (4 runs) |
 |---|---|---|
 | process start to `initialize` reply | < 50 ms | 13.9–14.5 ms |
 | one header `search` (scope subject, "Filler") | < 50 ms | 5.4–6.1 ms |
-| one `get_email` (plain message) | < 30 ms | 0.9–1.3 ms |
+| one `get_email` (plain message) | < 30 ms | 0.8–1.3 ms |
 
 DESIGN states the budgets for a 100 000-message store; the fixture has 2 000. The first launch of a
 freshly built binary costs ~0.7 s before `main` on macOS (a policy check), hence the warm-up.
@@ -119,15 +119,21 @@ Deferred rulings, not listed above: a body scan with `before` but no `after` sho
 `before − body_scan_days` (Task 9; today it uses now − `body_scan_days`, so an old `before` scans nothing);
 opaque signed-only messages (pkcs7-mime signed-data, not encrypted) stay undecoded (Task 7).
 
-Found while writing the docs: DESIGN §4 says a missing required column aborts "with the actual schema
-printed to stderr". `EnvelopeError::Schema` collects the `CREATE TABLE` statements in `dump`, but nothing
-prints them; stderr names only the missing columns.
+Found while writing the docs:
+
+- DESIGN §4 says a missing required column aborts "with the actual schema printed to stderr".
+  `EnvelopeError::Schema` collects the `CREATE TABLE` statements in `dump`, but nothing prints them;
+  stderr names only the missing columns.
+- DESIGN drift left in place: §2's grep list (`imap`, `send_`, `move_`, `delete_`, …) differs from
+  `tests/readonly.rs`; §7 names `OpensslPem` and the `openssl` crate, but the code shells out to `openssl
+  cms` (`OpensslCli`, `smime.openssl_bin`); §8 `get_email`'s `html` returns the raw HTML part as
+  `body_html`, not a stripped one; §8 lacks `get_email`'s `max_chars` bounds (500–200 000).
 
 ## Next steps
 
 1. Task 12: `cargo install --path .`, then `importin doctor --anon --json` on the real store (Full Disk
    Access through the app that launches opencode). Read only the anonymised report; any `FAIL` goes back
-   to the owning module before the switch.
+   to the owning module before the switch. Record the numbers in `docs/store-format.md`.
 2. Switch opencode: `~/mail/mail.json` `mail` command → `["/Users/paul/.cargo/bin/importin"]`, the `mail`
    agent prompt gets the new scopes and loses the attachment-tool notes, `tools/mail.ts` retires; then the
    yes/no/count smoke run through `opencode api`, and its numbers recorded here.

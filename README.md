@@ -15,10 +15,25 @@ cargo install --path .     # from this checkout, into ~/.cargo/bin/importin
 cargo install importin     # once it is published on crates.io
 ```
 
+Or take a release binary, once `glia-org/importin` has a release: each `v*` tag carries
+`importin-<tag>-<target>.zip` (binary, README, LICENSE) for `aarch64-apple-darwin` (Apple Silicon) and
+`x86_64-apple-darwin` (Intel). Download it from the release page or with `gh`, unzip it, clear the
+quarantine flag (the binary is not notarised; "No such xattr" means there was none) and put it on your
+`PATH`:
+
+```sh
+gh release download -R glia-org/importin -p '*-aarch64-apple-darwin.zip'   # latest release
+unzip importin-*-aarch64-apple-darwin.zip importin
+xattr -d com.apple.quarantine importin
+mkdir -p ~/.cargo/bin && mv importin ~/.cargo/bin/
+```
+
+The client snippets below assume `~/.cargo/bin/importin`; any absolute path works.
+
 Then run `importin doctor` (below) from the app that will launch your MCP host.
 
 **Full Disk Access.** `~/Library/Mail` sits behind Full Disk Access, and macOS asks the app at the top of
-the process chain, not importin: grant it to the app that launches the MCP host (the terminal or Glia for
+the process chain, not importin: grant it to the app that launches the MCP host (your terminal app for
 opencode and Claude Code, Claude.app for Claude Desktop) in System Settings → Privacy & Security → Full
 Disk Access. Without it the server exits at startup with "missing or access denied (Full Disk Access not
 granted?)" on stderr, and `importin doctor` shows `FAIL full disk access`.
@@ -91,7 +106,7 @@ written to disk. Signatures are not verified: a signed message says `signature: 
 - **`security` (default).** importin pipes the encrypted body to `/usr/bin/security cms -D`, which finds
   the private key among the identities of the keychain search list, normally your login keychain (`security
   find-identity -v -p smime` lists them; `doctor` counts them). An identity that lives only in the iCloud
-  keychain is not visible to it.
+  keychain is probably not visible to it (unverified).
 - **First run.** macOS asks whether `security` may use the private key: choose **Always Allow**. The grant
   belongs to Apple's signed `security`, so it survives rebuilds and updates of importin. Run `importin
   doctor` once from a terminal to get the dialog while you are there: its probe waits 60 s, the server's
@@ -103,10 +118,10 @@ written to disk. Signatures are not verified: a signed message says `signature: 
   identity as `.p12`, convert it to PEM, and point the config at it.
 
   ```sh
+  umask 077   # this shell's new files are readable by you alone, the key from its first byte
   # add -legacy to both if OpenSSL 3 refuses the file
   openssl pkcs12 -in me.p12 -nocerts -nodes -out ~/.config/importin/smime-key.pem
   openssl pkcs12 -in me.p12 -clcerts -nokeys -out ~/.config/importin/smime-cert.pem
-  chmod 600 ~/.config/importin/smime-key.pem
   ```
 
   ```toml

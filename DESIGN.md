@@ -1,6 +1,6 @@
 # Importin: a read-only MCP server for Apple Mail — design
 
-Amended 2026-11-04 during implementation: see §8 (get_thread, search from)
+Amended 2026-11-04 during implementation: see §8 (get_thread, search from, scope body needs a query).
 
 Status: specification, written 2026-11-04 from the decisions in `docs/design-panel-2026-11-04.html` and the
 user's picks of the same day (all recommendations taken; runtime changed to Rust; name Importin). Nothing is
