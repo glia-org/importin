@@ -5,8 +5,10 @@ mod support;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use support::fixture::{self, Epoch, Fixture};
 
@@ -19,11 +21,18 @@ const TOOLS: [&str; 6] = [
     "search",
 ];
 
+/// The children's timezone: +05:30 all year (no DST), so a `YYYY-MM-DD` bound is local midnight at
+/// a fixed, non-whole-hour distance from UTC midnight.
+const TZ: &str = "Asia/Kolkata";
+const TZ_OFFSET_MINUTES: i64 = 330;
+
 /// A running `importin serve`; killed on drop.
 struct Server {
     child: Child,
     stdin: ChildStdin,
     lines: Receiver<String>,
+    /// Echoes the child's stderr and returns all of it at EOF.
+    stderr: Option<JoinHandle<String>>,
     next_id: i64,
     _config: tempfile::TempDir,
 }
@@ -38,6 +47,10 @@ impl Drop for Server {
 impl Server {
     /// Spawns the binary against the fixture; account B excluded, openssl S/MIME when available.
     fn spawn(fx: &Fixture) -> Server {
+        Server::spawn_with(fx, &[])
+    }
+
+    fn spawn_with(fx: &Fixture, env: &[(&str, &str)]) -> Server {
         let dir = tempfile::tempdir().unwrap();
         let mut toml = String::from("exclude_accounts = [\"*@gmail.example\"]\n");
         if let Some(keys) = &fx.smime {
@@ -53,13 +66,26 @@ impl Server {
         let mut child = Command::new(env!("CARGO_BIN_EXE_importin"))
             .env("IMPORTIN_MAIL_ROOT", &fx.mail_root)
             .env("IMPORTIN_CONFIG", &config)
+            .env("TZ", TZ)
+            .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .spawn()
             .unwrap();
         let stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let stderr = std::thread::spawn(move || {
+            let mut all = String::new();
+            for line in BufReader::new(stderr).lines() {
+                let Ok(line) = line else { break };
+                eprintln!("{line}");
+                all += &line;
+                all.push('\n');
+            }
+            all
+        });
         let (tx, lines) = mpsc::channel();
         std::thread::spawn(move || {
             for line in BufReader::new(stdout).lines() {
@@ -73,9 +99,17 @@ impl Server {
             child,
             stdin,
             lines,
+            stderr: Some(stderr),
             next_id: 1,
             _config: dir,
         }
+    }
+
+    /// Kills the child and returns everything it wrote to stderr.
+    fn finish(mut self) -> String {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        self.stderr.take().unwrap().join().unwrap()
     }
 
     /// Spawned, initialized, and told so.
@@ -263,6 +297,40 @@ fn search_filters_from_dates_and_body() {
     assert_eq!(r["truncated"], json!(true));
 }
 
+fn received(hit: &Value) -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339(hit["date_received"].as_str().unwrap())
+        .unwrap()
+        .with_timezone(&Utc)
+}
+
+#[test]
+fn plain_dates_are_local_midnight() {
+    let fx = fixture::build(Epoch::Unix);
+    let mut s = Server::start(&fx);
+    // The fixture dates every message some hours before today 00:00 UTC.
+    let day = Utc::now().date_naive();
+    let midnight =
+        day.and_hms_opt(0, 0, 0).unwrap().and_utc() - chrono::Duration::minutes(TZ_OFFSET_MINUTES);
+    let all = s.ok("search", json!({"limit": 200}));
+    let hits = all["hits"].as_array().unwrap();
+    let (newer, older): (Vec<&Value>, Vec<&Value>) =
+        hits.iter().partition(|h| received(h) >= midnight);
+    let ids = |v: &[&Value]| -> Vec<i64> { v.iter().map(|h| h["id"].as_i64().unwrap()).collect() };
+    assert!(
+        !newer.is_empty() && !older.is_empty(),
+        "rows on both sides of {midnight}"
+    );
+
+    let r = s.ok("search", json!({"after": day.to_string(), "limit": 200}));
+    assert_eq!(hit_ids(&r, "hits"), ids(&newer), "after {day} = {midnight}");
+    let r = s.ok("search", json!({"before": day.to_string(), "limit": 200}));
+    assert_eq!(
+        hit_ids(&r, "hits"),
+        ids(&older),
+        "before {day} = {midnight}"
+    );
+}
+
 #[test]
 fn get_email_returns_recipients_and_body() {
     let fx = fixture::build(Epoch::Unix);
@@ -303,10 +371,22 @@ fn get_thread_three_messages() {
     let mut s = Server::start(&fx);
     let r = s.ok("get_thread", json!({"id": fx.ids.thread[1]}));
     assert_eq!(hit_ids(&r, "messages"), fx.ids.thread);
+    assert_eq!(r["truncated"], json!(false));
     assert!(r["messages"][0]["to"].is_array());
 
-    let r = s.ok("get_thread", json!({"id": fx.ids.thread[0], "limit": 2}));
-    assert_eq!(hit_ids(&r, "messages"), fx.ids.thread[..2]);
+    // The newest `limit`, oldest first.
+    for anchor in fx.ids.thread {
+        let r = s.ok("get_thread", json!({"id": anchor, "limit": 2}));
+        assert_eq!(
+            hit_ids(&r, "messages"),
+            fx.ids.thread[1..],
+            "anchor {anchor}"
+        );
+        assert_eq!(r["truncated"], json!(true));
+    }
+    let r = s.ok("get_thread", json!({"id": fx.ids.thread[0], "limit": 3}));
+    assert_eq!(hit_ids(&r, "messages"), fx.ids.thread);
+    assert_eq!(r["truncated"], json!(false));
 
     let msg = s.err("get_thread", json!({"id": fx.ids.excluded}));
     assert!(msg.contains("no message"), "{msg}");
@@ -396,6 +476,10 @@ fn argument_errors_are_tool_errors() {
     assert!(msg.contains("after") && msg.contains("YYYY-MM-DD"), "{msg}");
     let msg = s.err("search", json!({"before": "2025-13-01"}));
     assert!(msg.contains("before"), "{msg}");
+    for (after, before) in [("2025-02-01", "2025-01-01"), ("2025-01-01", "2025-01-01")] {
+        let msg = s.err("search", json!({"after": after, "before": before}));
+        assert_eq!(msg, "after must be before before");
+    }
 
     for limit in [0, 201] {
         let msg = s.err("search", json!({"query": "x", "limit": limit}));
@@ -436,4 +520,15 @@ fn first_reply_under_budget() {
         elapsed < Duration::from_millis(500),
         "first reply after {elapsed:?}"
     );
+}
+
+#[test]
+fn stray_stdout_print_goes_to_stderr() {
+    let fx = fixture::build(Epoch::Unix);
+    let mut s = Server::spawn_with(&fx, &[("IMPORTIN_TEST_STRAY_PRINT", "1")]);
+    s.initialize();
+    let r = s.ok("list_accounts", json!({}));
+    assert_eq!(r["accounts"][0]["identifier"], "paul@example.test");
+    let stderr = s.finish();
+    assert!(stderr.lines().any(|l| l == "stray"), "stderr: {stderr:?}");
 }

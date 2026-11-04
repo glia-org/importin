@@ -516,8 +516,9 @@ impl Envelope {
             .next())
     }
 
-    /// Non-deleted rows sharing the message's `conversation_id`, oldest first; just the message
-    /// when it has none (or the schema lacks the column); empty if the message is invisible.
+    /// Non-deleted rows sharing the message's `conversation_id`: the newest `limit`, oldest first;
+    /// just the message when it has none (or the schema lacks the column); empty if the message is
+    /// invisible.
     pub fn thread(&self, id: i64, limit: usize) -> Result<Vec<MessageRow>, EnvelopeError> {
         let exclusion = self.exclusion()?;
         let Some(m) = self.get_with(id, &exclusion)? else {
@@ -528,14 +529,16 @@ impl Envelope {
         };
         let sql = format!(
             "{}{exclusion} AND messages.conversation_id = ? AND {} = 0 \
-             ORDER BY messages.date_received, messages.ROWID LIMIT ?",
+             ORDER BY messages.date_received DESC, messages.ROWID DESC LIMIT ?",
             self.select,
             self.or_zero("messages.deleted")
         );
-        self.rows(
+        let mut rows = self.rows(
             &sql,
             vec![Value::Integer(conv), Value::Integer(limit as i64)],
-        )
+        )?;
+        rows.reverse();
+        Ok(rows)
     }
 
     /// Mailboxes of visible accounts, optionally only those whose account identifier contains

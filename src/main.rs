@@ -4,6 +4,7 @@ const USAGE: &str = "usage: importin [serve | doctor [--anon] [--json] | --versi
 
 fn main() -> ExitCode {
     importin::log::init();
+    importin::log::install_panic_hook();
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         None | Some("serve") if args.len() <= 1 => match serve() {
@@ -29,6 +30,10 @@ fn main() -> ExitCode {
 }
 
 fn serve() -> anyhow::Result<()> {
+    let channel = importin::tools::guard_stdout()?;
+    if std::env::var_os("IMPORTIN_TEST_STRAY_PRINT").is_some() {
+        println!("stray");
+    }
     let config = importin::config::load()?;
-    tokio::runtime::Runtime::new()?.block_on(importin::tools::serve(config))
+    tokio::runtime::Runtime::new()?.block_on(importin::tools::serve(config, channel))
 }

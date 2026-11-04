@@ -2,6 +2,7 @@
 //! `IMPORTIN_LOG` = error | warn | info | debug | trace (case-insensitive), default warn.
 
 use std::fmt;
+use std::panic::Location;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -59,6 +60,23 @@ pub fn write(level: Level, msg: fmt::Arguments<'_>) {
     }
 }
 
+/// Panics print only where they happened: the payload may hold message content.
+pub fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|info| {
+        write(
+            Level::Error,
+            format_args!("{}", panic_line(info.location())),
+        )
+    }));
+}
+
+fn panic_line(location: Option<&Location<'_>>) -> String {
+    match location {
+        Some(l) => format!("panic at {}:{}", l.file(), l.line()),
+        None => "panic at an unknown location".into(),
+    }
+}
+
 #[macro_export]
 macro_rules! warn {
     ($($arg:tt)*) => { $crate::log::write($crate::log::Level::Warn, format_args!($($arg)*)) };
@@ -85,6 +103,16 @@ mod tests {
         assert_eq!(Level::parse("error"), Some(Level::Error));
         assert_eq!(Level::parse("verbose"), None);
         assert_eq!(Level::parse(""), None);
+    }
+
+    #[test]
+    fn panic_line_is_location_only() {
+        let here = Location::caller();
+        assert_eq!(
+            panic_line(Some(here)),
+            format!("panic at src/log.rs:{}", here.line())
+        );
+        assert_eq!(panic_line(None), "panic at an unknown location");
     }
 
     #[test]

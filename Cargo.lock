@@ -754,6 +754,7 @@ dependencies = [
  "chrono",
  "dirs",
  "glob",
+ "libc",
  "mail-parser",
  "pdf-extract",
  "plist",

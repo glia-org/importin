@@ -2,14 +2,15 @@
 //! stderr. The blocking reads run on tokio's blocking pool, sharing one `Arc<Context>`.
 
 use std::fmt::Display;
+use std::fs::File;
+use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::time::Instant;
 
-use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, Offset, TimeZone, Utc};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
-use rmcp::transport::stdio;
 use rmcp::{ErrorData, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -45,9 +46,9 @@ struct SearchArgs {
     /// recipients and Mail's summary; participant = from, to, cc and bcc. body reads message files
     /// received since `after` (default 90 days ago); encrypted bodies are never searched.
     scope: Option<String>,
-    /// Received at or after: RFC 3339 (2025-01-31T09:00:00+01:00) or YYYY-MM-DD (00:00 UTC).
+    /// Received at or after: RFC 3339 (2025-01-31T09:00:00+01:00) or YYYY-MM-DD (local midnight).
     after: Option<String>,
-    /// Received before: RFC 3339 or YYYY-MM-DD (00:00 UTC).
+    /// Received before: RFC 3339 or YYYY-MM-DD (local midnight). Must be later than `after`.
     before: Option<String>,
     /// Substring of the mailbox name, e.g. "INBOX" or "Archive".
     mailbox: Option<String>,
@@ -79,7 +80,7 @@ struct GetEmailArgs {
 struct GetThreadArgs {
     /// Id of any message in the conversation.
     id: i64,
-    /// Maximum messages, 1-200 (default 50).
+    /// Maximum messages, the newest kept, 1-200 (default 50).
     limit: Option<u32>,
 }
 
@@ -104,6 +105,8 @@ struct ListMailboxesArgs {
 #[derive(Serialize)]
 struct Thread {
     messages: Vec<SearchHit>,
+    /// Older messages of the conversation were left out.
+    truncated: bool,
 }
 
 #[derive(Serialize)]
@@ -121,15 +124,29 @@ struct Server {
     tool_router: ToolRouter<Server>,
 }
 
-/// Opens the store, then serves until the client disconnects.
-pub async fn serve(config: Config) -> anyhow::Result<()> {
+/// Moves the MCP channel off fd 1: returns a duplicate of fd 1 (close-on-exec, so child processes
+/// do not inherit it) for the transport and points fd 1 at stderr, so a stray print from any
+/// dependency lands on stderr instead of corrupting the channel. Call before anything prints.
+pub fn guard_stdout() -> std::io::Result<File> {
+    let channel = std::io::stdout().as_fd().try_clone_to_owned()?;
+    // SAFETY: dup2 on two descriptors this process holds open; it only replaces fd 1.
+    if unsafe { libc::dup2(libc::STDERR_FILENO, libc::STDOUT_FILENO) } == -1 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(File::from(channel))
+}
+
+/// Opens the store, then serves on stdin and `channel` (from [`guard_stdout`]) until the client
+/// disconnects.
+pub async fn serve(config: Config, channel: File) -> anyhow::Result<()> {
     let ctx = read::open(config)?;
     let server = Server {
         ctx: Arc::new(ctx),
         tool_router: Server::tool_router(),
     };
     crate::info!("serving MCP on stdio");
-    server.serve(stdio()).await?.waiting().await?;
+    let transport = (tokio::io::stdin(), tokio::fs::File::from_std(channel));
+    server.serve(transport).await?.waiting().await?;
     Ok(())
 }
 
@@ -184,8 +201,8 @@ impl Server {
     }
 
     #[tool(
-        description = "The messages of the conversation containing `id`, oldest first, in the \
-            search hit shape.",
+        description = "The newest `limit` messages of the conversation containing `id`, oldest \
+            first, in the search hit shape; `truncated` says older ones were left out.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -203,12 +220,17 @@ impl Server {
         };
         let id = args.id;
         self.run("get_thread", move |ctx| -> Result<Thread, ReadError> {
-            let rows = ctx.envelope().thread(id, limit)?;
+            let mut rows = ctx.envelope().thread(id, limit + 1)?;
             if rows.is_empty() {
                 return Err(ReadError::NotFound(id));
             }
+            let truncated = rows.len() > limit;
+            if truncated {
+                rows.remove(0);
+            }
             Ok(Thread {
                 messages: rows.into_iter().map(read::hit).collect(),
+                truncated,
             })
         })
         .await
@@ -309,8 +331,9 @@ impl Server {
                 crate::debug!("{tool}: error in {ms} ms: {e}");
                 Ok(error(e.to_string()))
             }
-            Err(e) => {
-                crate::warn!("{tool}: {e}");
+            // The JoinError's text holds the panic payload, which may be message content.
+            Err(_) => {
+                crate::warn!("{tool}: task panicked");
                 Ok(error(format!(
                     "internal error in {tool}; see the server's stderr"
                 )))
@@ -355,11 +378,26 @@ fn filter(a: SearchArgs) -> Result<Filter, String> {
     if scope == Scope::Body && terms.is_empty() {
         return Err(BODY_NEEDS_QUERY.into());
     }
+    let after = a
+        .after
+        .as_deref()
+        .map(|s| date("after", s, &Local))
+        .transpose()?;
+    let before = a
+        .before
+        .as_deref()
+        .map(|s| date("before", s, &Local))
+        .transpose()?;
+    if let (Some(after), Some(before)) = (after, before)
+        && after >= before
+    {
+        return Err("after must be before before".into());
+    }
     Ok(Filter {
         terms,
         scope,
-        after: a.after.as_deref().map(|s| date("after", s)).transpose()?,
-        before: a.before.as_deref().map(|s| date("before", s)).transpose()?,
+        after,
+        before,
         mailbox: a.mailbox,
         account: a.account,
         from: a.from,
@@ -371,14 +409,26 @@ fn filter(a: SearchArgs) -> Result<Filter, String> {
     })
 }
 
-/// RFC 3339, or `YYYY-MM-DD` as 00:00 UTC.
-fn date(field: &str, s: &str) -> Result<DateTime<Utc>, String> {
+/// RFC 3339, or `YYYY-MM-DD` as midnight in `tz` (the process's local timezone in the tools). When
+/// midnight falls in a DST gap, the day starts at the transition: midnight in the offset in force
+/// the day before.
+fn date<Tz: TimeZone>(field: &str, s: &str, tz: &Tz) -> Result<DateTime<Utc>, String> {
     let s = s.trim();
     if let Ok(t) = DateTime::parse_from_rfc3339(s) {
         return Ok(t.with_timezone(&Utc));
     }
     NaiveDate::parse_from_str(s, "%Y-%m-%d")
-        .map(|d| d.and_time(NaiveTime::MIN).and_utc())
+        .map(|d| {
+            let midnight = d.and_time(NaiveTime::MIN);
+            match tz.from_local_datetime(&midnight).earliest() {
+                Some(t) => t.with_timezone(&Utc),
+                None => {
+                    let day_before = midnight.and_utc() - Duration::days(1);
+                    let offset = tz.offset_from_utc_datetime(&day_before.naive_utc()).fix();
+                    (midnight - Duration::seconds(offset.local_minus_utc().into())).and_utc()
+                }
+            }
+        })
         .map_err(|_| {
             format!("{field} must be RFC 3339 (2025-01-31T09:00:00+01:00) or YYYY-MM-DD; got {s:?}")
         })
@@ -396,5 +446,21 @@ fn bounded(
         Ok(v)
     } else {
         Err(format!("{name} must be between {min} and {max}; got {v}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::FixedOffset;
+
+    #[test]
+    fn plain_date_is_midnight_in_the_timezone() {
+        let berlin_winter = FixedOffset::east_opt(3600).unwrap();
+        let t = date("after", "2026-01-01", &berlin_winter).unwrap();
+        assert_eq!(t.to_rfc3339(), "2025-12-31T23:00:00+00:00");
+        let t = date("after", "2026-01-01T09:00:00+01:00", &berlin_winter).unwrap();
+        assert_eq!(t.to_rfc3339(), "2026-01-01T08:00:00+00:00");
+        assert!(date("after", "2026-02-30", &berlin_winter).is_err());
     }
 }

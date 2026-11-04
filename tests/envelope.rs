@@ -305,9 +305,10 @@ fn thread_by_conversation_id() {
     for id in fx.ids.thread {
         assert_eq!(ids(&env.thread(id, 50).unwrap()), fx.ids.thread.to_vec());
     }
+    // The newest `limit`, oldest first.
     assert_eq!(
-        ids(&env.thread(fx.ids.thread[2], 2).unwrap()),
-        fx.ids.thread[..2].to_vec()
+        ids(&env.thread(fx.ids.thread[0], 2).unwrap()),
+        fx.ids.thread[1..].to_vec()
     );
     assert_eq!(
         ids(&env.thread(fx.ids.plain, 50).unwrap()),
