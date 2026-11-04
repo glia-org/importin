@@ -1,5 +1,7 @@
 # Importin: a read-only MCP server for Apple Mail — design
 
+Amended 2026-11-04 during implementation: see §8 (get_thread, search from)
+
 Status: specification, written 2026-11-04 from the decisions in `docs/design-panel-2026-11-04.html` and the
 user's picks of the same day (all recommendations taken; runtime changed to Rust; name Importin). Nothing is
 built yet. The implementation plan follows this document.
@@ -159,10 +161,11 @@ one-line message and, where useful, a `hint` (for example "narrow with after: or
 
 ### `search`
 
-Args: `query` (string, may be empty when filters do the work), `scope` (`all` | `subject` | `from` | `to`
-| `cc` | `participant` | `body`, default `all`), `after`, `before`, `mailbox` (substring of the display
-name), `account` (substring of `user@host`), `unread` (bool), `flagged` (bool), `limit` (1–200, default 25),
-`offset`.
+Args: `query` (string, may be empty when filters do the work, except with `scope: body`), `scope` (`all` |
+`subject` | `from` | `to` | `cc` | `participant` | `body`, default `all`), `after`, `before`, `mailbox`
+(substring of the display name), `account` (substring of `user@host`), `from` (substring of the sender's
+address or name; combines with any scope, `body` included), `unread` (bool), `flagged` (bool), `limit`
+(1–200, default 25), `offset`.
 
 Semantics: `query` is split on whitespace into terms; every term must match (AND) within the chosen
 scope. Header scopes match case-insensitively as substrings of `prefix || subject`, `address` or
@@ -170,11 +173,12 @@ scope. Header scopes match case-insensitively as substrings of `prefix || subjec
 `all` = subject + participant + `summaries.summary` when present). Results ordered by `date_received`
 descending (relevance ranking is out of scope; dates are what the agent prompt asks for).
 
-`scope: body` runs the bounded scan: candidates are the header-filtered rows (`after` defaults to 90 days
-before now when absent; `mailbox`/`account`/`from` narrow further), capped at `config.body_scan_max`
-(default 500) newest rows; each candidate's `.emlx` is parsed and its text body (§6; encrypted bodies are
-skipped) searched for all terms; stops when `limit` hits are found. The response says `scanned`,
-`candidates_total`, `truncated` so the agent can narrow instead of guessing.
+`scope: body` needs a non-empty `query`; without one the call is a tool error ("scope body needs a query;
+use another scope for header-only filters"). It runs the bounded scan: candidates are the header-filtered
+rows (`after` defaults to 90 days before now when absent; `mailbox`/`account`/`from` narrow further), capped
+at `config.body_scan_max` (default 500) newest rows; each candidate's `.emlx` is parsed and its text body
+(§6; encrypted bodies are skipped) searched for all terms; stops when `limit` hits are found. The response
+says `scanned`, `candidates_total`, `truncated` so the agent can narrow instead of guessing.
 
 Returns: `[{id, date_received, subject, from, to, cc, mailbox, account, read, flagged, encrypted, signed,
 has_attachments, snippet}]` where `snippet` is the Envelope Index summary when present, else null.
@@ -190,9 +194,10 @@ bcc, reply_to, mailbox, account, read, flagged, body, body_source, truncated, en
 
 ### `get_thread`
 
-Args: `id`, `limit` (default 50). Returns the messages sharing the row's `conversation_id`, oldest first,
-in the `search` result shape. If `conversation_id` is absent in the schema, falls back to `References`
-and `In-Reply-To` of the one message (one file read) and says so.
+Args: `id`, `limit` (1–200, default 50). Returns `{messages, truncated}`: the newest `limit` non-deleted
+messages sharing the row's `conversation_id`, oldest first, in the `search` result shape; `truncated: true`
+when older messages of the conversation were left out. A message without a `conversation_id` (or a schema
+without the column) comes back alone; an unknown or excluded `id` is a tool error.
 
 ### `attachment_text`
 

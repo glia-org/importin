@@ -1,0 +1,137 @@
+# Handoff
+
+## State (2026-11-04)
+
+Branch `impl`. Implementation tasks 1–11 of [`docs/plan-2026-11-04.md`](docs/plan-2026-11-04.md) are
+done: the crate (`store`, `envelope`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`, `tools`,
+`doctor`, `config`, `log`), the binary (`importin`, `importin serve`, `importin doctor [--anon] [--json]`,
+`importin --version`), the read-only source grep, the budget check, the docs and the release workflow.
+`cargo test`: 150 passed, 1 ignored (the release budget test), no warnings. Everything has run on the
+synthetic store only; nothing has read `~/Library/Mail` yet. Task 12 (real store and opencode switch)
+remains.
+
+## Build, test, run
+
+```sh
+cargo build --release          # target/release/importin
+cargo test                     # all tests, on a synthetic store built in a temp dir
+checks/budgets.sh              # release build; latency budgets on a 2 000-message fixture
+cargo install --path .         # ~/.cargo/bin/importin
+importin doctor --anon --json  # the real store, numbers and booleans only
+```
+
+The tests never touch `~/Library/Mail`: `tests/support/fixture.rs` builds a `Mail/V10` tree and the binary
+is pointed at it with `IMPORTIN_MAIL_ROOT`. The S/MIME tests need `openssl` on `PATH` (here Homebrew's
+OpenSSL 3; they skip without it). `tests/doctor.rs` runs `security find-identity -v -p
+smime` on the real keychain (read-only, count only).
+
+Budgets (DESIGN §2), last measured 2026-11-04 on this Mac (Apple Silicon), release build, 2 000 messages,
+after one warm-up launch:
+
+| measure | budget | measured (3 runs) |
+|---|---|---|
+| process start to `initialize` reply | < 50 ms | 13.9–14.5 ms |
+| one header `search` (scope subject, "Filler") | < 50 ms | 5.4–6.1 ms |
+| one `get_email` (plain message) | < 30 ms | 0.9–1.3 ms |
+
+DESIGN states the budgets for a 100 000-message store; the fixture has 2 000. The first launch of a
+freshly built binary costs ~0.7 s before `main` on macOS (a policy check), hence the warm-up.
+
+## Unverified on a real store
+
+- **Shard formula** (`ROWID / 1000`, digits reversed, one directory each): from one reader's source. A
+  wrong formula costs a walk, not mail; `doctor`'s path sample shows formula vs. walk hits.
+- **`security cms` on the real keychain**: whether it finds Mail's S/MIME identity on the keychain search
+  list, whether the "Always Allow" dialog appears and sticks, and identities that live only in the iCloud
+  keychain. `doctor`'s decrypt probe is the check.
+- **`authEnveloped-data`**: refused before calling `security`; the openssl path passes it to `openssl cms
+  -decrypt` but has never decrypted real AES-GCM data.
+- **Flag-bit layout** (bit 3 encrypted, 23 signed, 10–15 attachment count, …): two published layouts
+  disagree. The content type decides encryption; `doctor`'s flag check compares bit 3 against it.
+- Also not yet seen on the real store: the mailbox URL form (`imap-user-host`, `mailbox-uuid`, mixed),
+  the snapshot fallback when the read-only open is refused, and the budgets at 100 000 messages.
+
+## Known gaps
+
+Collected from the review ledger (`.superpowers/sdd/plan-2026-11-04/progress.md`, kept out of git), the
+`minor (deferred)` lines as written, by task.
+
+**Task 1**
+
+- UnknownKey detected by toml error-message prefix (config.rs:114-120); nested unknown key untested; load() home-dir fallback.
+
+**Task 2**
+
+- no test proves immutable=1 is never used (would need rows left only in the WAL); readonly grep in Task 11 covers the string.
+- huge_emlx fixture file has no plist trailer (fixture.rs:371-376); no committed self-check of fixture invariants; store.rs Undetermined and non-SQLite-header branches untested; chmod-000 test fails under root; fixture `base` from wall clock (cross-epoch test may flake across UTC midnight); `V+5` parses as 5; flag bits 2/6/24 never set in fixture.
+
+**Task 3**
+
+- LIKE case-folding is ASCII-only (MÜLLER vs Müller); tempfile moved to runtime deps (needed for snapshot); mailboxes listed in ROWID order.
+- schema-fallback branches untested except conversation_id; unread filter without `read` column degenerates; sub-second precision dropped in after/before; thread() deleted-anchor inconsistency; Counts.messages includes rows with no mailbox row; some date-ordered tests Unix-only; tests hard-code ROWIDs that have ids names; envelope.rs 892 lines (URL parsing could split).
+- exclusion check and main query are two reads, not one transaction (microsecond window for a mailbox created in between).
+
+**Task 4**
+
+- user@host URL candidates include same-named mailboxes of other accounts (first sorted hit wins; ROWIDs unique); config.rs fails cargo fmt --check (pre-existing).
+- read_dir denial inside .mbox/Data reported as Ok(None) (store_dirs, file_type Err → continue); walk picks first file per ROWID in DFS order (.partial may beat .emlx in a wrong shard); every Mail write invalidates walk caches via -wal mtime (cost shows in doctor formula/walk counts); fixture has no non-ASCII mailbox name (NFC/NFD untested).
+
+**Task 5**
+
+- strip_html runs words together at `</td>` and opening block tags; '>' inside quoted attribute ends a tag; source newlines kept as line breaks; `<title>` text leaks; decode_entities quadratic on '&' without ';'; control-char entities decode; filename scan may claim another part's file with duplicate names; find_external errors silently become NotDownloaded/NotExtractable; Unavailable Display uses Debug casing; no absolute-path filename test; unnamed text/calendar parts invisible; mime.rs 532 lines (html part could split).
+- entity() returns first char only (two-codepoint HTML5 entities lose the second); invalid numeric entities → U+FFFD; metadata/read race on external files.
+
+**Task 6**
+
+- NotEnveloped also covers "enveloped but body not DER"; opaque-signed check uses signed_der().is_some(); config.rs rustfmt (pre-existing).
+- openssl() test helper splits on whitespace (TMPDIR with spaces breaks it); try_wait error path kills without wait and reports Spawn; reader joins unbounded after normal exit; auth-enveloped policy keyed on name string; sleep-5 test script without exec leaves an orphan; no stderr-flood test; DER check line duplicated in mime.rs; opaque signed-data without DER/smime-type falls through as unsigned.
+
+**Task 7**
+
+- limit == 0 reports truncated; config.rs rustfmt (pre-existing).
+- inner parse failure after decrypt fails the whole read; p7m filter case-sensitive; skipped not Option; duplicated load code; skips_encrypted test could pass vacuously; weak field-source tests; empty-terms body scan reads all candidates (decide at MCP layer in Task 9: require non-empty query for scope body); body_scan_days unbounded (chrono overflow for absurd values) — cap in config at 36500 (Task 9/11).
+
+**Task 8**
+
+- zip/xlsx inflated-size not bounded; pdf_extract has no time limit; catch_unwind relies on panic=unwind in the release profile (do not set panic=abort).
+- slide ordering untested (fix round adds it); encrypted test skips silently without openssl; unbounded zip entry decompression; unknown XML entities dropped silently.
+- search's body_text still has its own locate/read/parse copy.
+
+**Task 9**
+
+- three direct eprintln! in envelope.rs bypass the log format.
+- scope description hard-codes "90 days"; unread:false/flagged:false behave as absent; protocol tests do not exercise mailbox/unread/flagged/offset; instructions checked by prefix only; envelope.rs raw eprintln!.
+- (final fix wave) tools::date gap fallback panics on NaiveDate::MIN in positive-offset zones (use checked arithmetic → parse error); DESIGN §8 get_thread text needs newest-limit + truncated; IMPORTIN_TEST_STRAY_PRINT hook ships in release (harmless).
+
+**Task 10**
+
+- mail root without `V<n>` reports FDA "undetermined"; smime_identities None on non-zero exit too; doctor tests call `security find-identity` on the real keychain (read-only, count only).
+- doctor tests spawn `security find-identity` (not hermetic); missing tests for failing probe / FAIL rows / security branch; scrub over-redacts "ProtonMail/".
+- a certificate name on the first stderr line of the security probe would still show under --anon (status code suffices; consider dropping stderr entirely under anon in the final wave).
+- scrub word-start set lacks < [ { ; and relative ../ paths; \r not a line end; cert CN on first stderr line survives; anon_probe_stderr test vacuous without openssl.
+
+Since resolved: the `immutable=1` check (Task 2) is `tests/readonly.rs`; `config.rs`'s rustfmt drift
+(Tasks 4, 6, 7) went in `style: cargo fmt`; the empty-query body scan and the `body_scan_days` cap (Task 7)
+were settled in Task 9 (tool error; at most 36500); slide ordering (Task 8) is tested in `src/attach.rs`;
+DESIGN §8 `get_thread` (Task 9) was amended in Task 11.
+
+Deferred rulings, not listed above: a body scan with `before` but no `after` should default `after` to
+`before − body_scan_days` (Task 9; today it uses now − `body_scan_days`, so an old `before` scans nothing);
+opaque signed-only messages (pkcs7-mime signed-data, not encrypted) stay undecoded (Task 7).
+
+Found while writing the docs: DESIGN §4 says a missing required column aborts "with the actual schema
+printed to stderr". `EnvelopeError::Schema` collects the `CREATE TABLE` statements in `dump`, but nothing
+prints them; stderr names only the missing columns.
+
+## Next steps
+
+1. Task 12: `cargo install --path .`, then `importin doctor --anon --json` on the real store (Full Disk
+   Access through the app that launches opencode). Read only the anonymised report; any `FAIL` goes back
+   to the owning module before the switch.
+2. Switch opencode: `~/mail/mail.json` `mail` command → `["/Users/paul/.cargo/bin/importin"]`, the `mail`
+   agent prompt gets the new scopes and loses the attachment-tool notes, `tools/mail.ts` retires; then the
+   yes/no/count smoke run through `opencode api`, and its numbers recorded here.
+3. The final fix wave: the deferred rulings above and the "final fix wave" items of Tasks 9 and 10.
+4. Before `cargo publish`: `Cargo.toml` has no `license`, `description` or `repository` yet, which
+   crates.io requires (the first two) or expects; the release workflow runs on the first `v*` tag once the
+   repo is on GitHub.

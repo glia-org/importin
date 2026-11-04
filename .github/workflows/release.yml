@@ -1,0 +1,25 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+    runs-on: macos-latest
+    env:
+      ZIP: importin-${{ github.ref_name }}-${{ matrix.target }}.zip
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - run: zip -j "$ZIP" "target/${{ matrix.target }}/release/importin" README.md LICENSE
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP }}
