@@ -1,15 +1,18 @@
 //! Compose one message (index row + emlx + MIME + S/MIME) and search, with a bounded body scan.
 //! Decrypted content lives only in the returned `Email`; nothing is cached or written.
 
+use std::path::Path;
+
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde::Serialize;
 
+use crate::attach::{self, Extracted};
 use crate::config::Config;
 use crate::emlx::{self, EmlxError, Flags};
 use crate::envelope::{self, Address, EnvelopeError, Filter, MessageRow, Scope};
-use crate::mime::{self, AttachmentInfo, Body, BodySource, MimeError};
+use crate::mime::{self, AttachmentInfo, AttachmentState, Body, BodySource, MimeError};
 use crate::paths::{Locator, PathError};
-use crate::smime::{self, Decryptor, EncryptionInfo};
+use crate::smime::{self, DecryptError, Decryptor, EncryptionInfo};
 use crate::store::{self, StoreError};
 
 const HINT: &str = "narrow with after:, from: or mailbox:";
@@ -82,6 +85,12 @@ pub enum ReadError {
     Path(#[from] PathError),
     #[error(transparent)]
     Envelope(#[from] EnvelopeError),
+    #[error("{filename} was never fetched from the server; open it in Mail once to download it")]
+    NotDownloaded { filename: String },
+    #[error("{filename} is declared but not present on disk")]
+    NotExtractable { filename: String },
+    #[error("cannot decrypt the message: {0}")]
+    Decrypt(#[from] DecryptError),
 }
 
 /// The index row as a search hit shows it.
@@ -224,6 +233,73 @@ pub fn get_email(ctx: &Context, id: i64, max_chars: usize, html: bool) -> Result
         truncated: body.truncated,
         encryption,
         attachments,
+    })
+}
+
+/// The text of one attachment, chosen by exact `filename`, else by `index` (a position in the list
+/// `get_email` returns). The message loads as in `get_email`; an enveloped message's attachments
+/// come from its decrypted entity, and a decryption failure is an error.
+pub fn attachment_text(
+    ctx: &Context,
+    id: i64,
+    filename: Option<&str>,
+    index: Option<usize>,
+    max_chars: usize,
+) -> Result<Extracted, ReadError> {
+    let row = ctx.env.get(id)?.ok_or(ReadError::NotFound(id))?;
+    let located =
+        ctx.locator
+            .locate(id, &row.mailbox_url)?
+            .ok_or_else(|| ReadError::FileMissing {
+                id,
+                mailbox: row.mailbox.clone(),
+            })?;
+    let file = emlx::read(&located.emlx)?;
+    let outer = mime::parse(&file.raw)?;
+    if outer.is_enveloped() {
+        let unwrapped = smime::unwrap(&outer, ctx.decryptor.as_ref())?;
+        let inner = mime::parse(&unwrapped.inner)?;
+        extract_one(&inner, None, filename, index, max_chars)
+    } else {
+        let dir = Some(located.attachments_dir.as_path());
+        extract_one(&outer, dir, filename, index, max_chars)
+    }
+}
+
+fn extract_one(
+    parsed: &mime::Parsed<'_>,
+    dir: Option<&Path>,
+    filename: Option<&str>,
+    index: Option<usize>,
+    max_chars: usize,
+) -> Result<Extracted, ReadError> {
+    let list = parsed.attachments(dir);
+    let info = filename
+        .and_then(|f| list.iter().find(|a| a.filename == f))
+        .or_else(|| index.and_then(|i| list.get(i)))
+        .ok_or_else(|| {
+            MimeError::NoSuchPart(match (filename, index) {
+                (Some(f), Some(i)) => format!("filename {f:?} or index {i}"),
+                (Some(f), None) => format!("filename {f:?}"),
+                (None, Some(i)) => format!("index {i}"),
+                (None, None) => "neither filename nor index given".to_string(),
+            })
+        })?;
+    let bytes = parsed.attachment_bytes(info, dir).map_err(|e| {
+        let filename = info.filename.clone();
+        match e {
+            MimeError::Unavailable(AttachmentState::NotDownloaded) => {
+                ReadError::NotDownloaded { filename }
+            }
+            MimeError::Unavailable(AttachmentState::NotExtractable) => {
+                ReadError::NotExtractable { filename }
+            }
+            e => e.into(),
+        }
+    })?;
+    Ok(Extracted {
+        state: info.state,
+        ..attach::extract(&bytes, &info.filename, &info.mime_type, max_chars)
     })
 }
 

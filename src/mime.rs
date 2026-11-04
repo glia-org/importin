@@ -21,6 +21,8 @@ pub enum MimeError {
     Unparseable,
     #[error("the message has no part {0}")]
     NoPart(String),
+    #[error("no such attachment: {0}")]
+    NoSuchPart(String),
     #[error("attachment is {0:?}: its bytes are not available")]
     Unavailable(AttachmentState),
     #[error("attachment path leaves the attachment directory: {}", .0.display())]
@@ -427,7 +429,7 @@ fn contained(dir: &Path, file: &Path) -> Result<PathBuf, MimeError> {
     }
 }
 
-fn truncate(mut text: String, max_chars: usize) -> (String, bool) {
+pub(crate) fn truncate(mut text: String, max_chars: usize) -> (String, bool) {
     match text.char_indices().nth(max_chars) {
         Some((at, _)) => {
             text.truncate(at);

@@ -797,7 +797,7 @@ fn b64(bytes: &[u8]) -> String {
 }
 
 /// One page, Helvetica, uncompressed content stream showing "pdf sentence".
-fn pdf() -> Vec<u8> {
+pub fn pdf() -> Vec<u8> {
     let stream = "BT /F1 24 Tf 72 720 Td (pdf sentence) Tj ET";
     let objects = [
         "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
@@ -865,7 +865,7 @@ fn zip(entries: &[(&str, String)]) -> Vec<u8> {
 
 const OOXML: &str = "application/vnd.openxmlformats-officedocument";
 
-fn docx() -> Vec<u8> {
+pub fn docx() -> Vec<u8> {
     zip(&[
         (
             "[Content_Types].xml",
@@ -885,7 +885,7 @@ fn docx() -> Vec<u8> {
     ])
 }
 
-fn xlsx() -> Vec<u8> {
+pub fn xlsx() -> Vec<u8> {
     let ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     zip(&[
         (
@@ -923,7 +923,7 @@ fn xlsx() -> Vec<u8> {
     ])
 }
 
-fn pptx() -> Vec<u8> {
+pub fn pptx() -> Vec<u8> {
     let p = "http://schemas.openxmlformats.org/presentationml/2006/main";
     let a = "http://schemas.openxmlformats.org/drawingml/2006/main";
     zip(&[
