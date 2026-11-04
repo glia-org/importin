@@ -53,10 +53,19 @@ freshly built binary costs ~0.7 s before `main` on macOS (a policy check), hence
 - **Account labels**: `ZACCOUNT`/`ZACCOUNTTYPE` of `~/Library/Accounts/Accounts4.sqlite` were checked by
   hand for the four Mail uuids; `accounts::load` itself has only read the fixture. If it fails, accounts
   show their uuids (logged at debug).
-- Also not yet seen on the real store: the mailbox URL form (`imap-user-host`, `mailbox-uuid`, mixed),
-  the snapshot fallback when the read-only open is refused, and the budgets at 100 000 messages.
+- Seen on the real store on 2026-11-04 (`docs/store-format.md`, last section): URL form `mailbox-uuid`
+  throughout, read-only open accepted (no snapshot), shard formula 20/20, flag bit 3 wrong on 2 of 20,
+  3 of 4 account labels resolved, 120 378 messages answered in 2–3 ms. Still unseen: the snapshot fallback,
+  the `all`/`participant` timings on the real store (added after that run), and the keychain dialog
+  being accepted (the first probe timed out waiting for the click).
 
 ## Known gaps
+
+- **Residual from the final review (not fixed):** calamine's `worksheet_range` allocates rows × cols cells;
+  a ~1 KB xlsx with cells at A1 and XFD1048576 passes the zip-size guard and can abort the process on
+  allocation failure, which `catch_unwind` cannot catch. Fix: cap the cell count before
+  `worksheet_range` or read the sheet dimension first. Until then a hostile spreadsheet attachment can take
+  the server down (opencode restarts it; nothing is written or leaked).
 
 Collected from the review ledger (`.superpowers/sdd/plan-2026-11-04/progress.md`, kept out of git), the
 `minor (deferred)` lines as written, by task.
@@ -150,11 +159,12 @@ Found while writing the docs:
 
 ## Next steps
 
-1. Task 12: `cargo install --path .`, then `importin doctor --anon --json` on the real store (Full Disk
-   Access through the app that launches opencode). Read only the anonymised report; any `FAIL` goes back
-   to the owning module before the switch. Record the numbers in `docs/store-format.md`, the timings
-   included: `open`, `search_header` (scope subject), `search_all` and `search_participant` (these two
-   also match recipients, `all` summaries too) and `get_email`.
+1. Done 2026-11-04: installed at `~/.cargo/bin/importin`, `doctor --anon` numbers in
+   `docs/store-format.md`. Open before the switch: (a) the user runs `importin doctor` once and clicks
+   "Always Allow" in the keychain dialog so the decrypt probe can pass; (b) the user writes
+   `~/.config/importin/config.toml` with `exclude_accounts` for the account that must stay invisible
+   (patterns match address, account name, account type or uuid; `importin doctor` lists the
+   identifiers). Without (b) every account is visible to the agent.
 2. Switch opencode: `~/mail/mail.json` `mail` command → `["/Users/paul/.cargo/bin/importin"]`, the `mail`
    agent prompt gets the new scopes and loses the attachment-tool notes, `tools/mail.ts` retires; then the
    yes/no/count smoke run through `opencode api`, and its numbers recorded here.

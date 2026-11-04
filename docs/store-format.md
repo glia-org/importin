@@ -114,3 +114,19 @@ directory. The parts of a decrypted S/MIME message are read from the decrypted e
 `Attachments/` lookup.
 
 Several of these facts were first written down in hexrw/mailgrep's store-format notes (MIT); no code was copied.
+
+## Seen on a real store (2026-11-04, macOS 26.5, `importin doctor --anon`)
+
+| item | value |
+|---|---|
+| messages / mailboxes / accounts | 120 378 / 58 / 4 |
+| Envelope Index open | read-only, live (no snapshot) |
+| schema | every optional column present (incl. `recipients.*`, `summaries.summary`) |
+| timestamp epoch | Unix seconds |
+| mailbox URL form | `mailbox://<uuid>/<path>` for every mailbox |
+| path sample (20 newest) | 20 by formula, 0 by walk, 0 missing |
+| flag bit 3 vs content type (20 sampled) | 18 agree, 2 disagree: the bit is a hint, the content type decides |
+| account labels | 3 of 4 uuids resolve through `Accounts4.sqlite` (one IMAP account has neither username nor description there) |
+| S/MIME identities in the login keychain | 1 |
+| decrypt probe (`security cms -D -n`) | timed out at 60 s on the first run: the keychain "Always Allow" dialog needs a click before it can succeed |
+| timings | open 3 ms, header search (subject) 2 ms, get_email < 1 ms |
