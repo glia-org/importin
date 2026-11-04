@@ -133,6 +133,11 @@ pub fn parse(toml_text: &str, env: &HashMap<String, String>) -> Result<Config, C
             "smime.decryptor = \"openssl\" requires smime.key and smime.cert".into(),
         ));
     }
+    if raw.body_scan_days > 36_500 {
+        return Err(ConfigError::Invalid(
+            "body_scan_days must be at most 36500".into(),
+        ));
+    }
     Ok(Config {
         mail_root,
         exclude_accounts: raw.exclude_accounts,
@@ -179,6 +184,15 @@ mod tests {
         let r = parse("[smime]
 decryptor = \"openssl\"", &no_env());
         assert!(matches!(r, Err(ConfigError::Invalid(_))));
+    }
+
+    #[test]
+    fn body_scan_days_capped() {
+        assert!(parse("body_scan_days = 36500", &no_env()).is_ok());
+        let r = parse("body_scan_days = 36501", &no_env());
+        assert!(
+            matches!(&r, Err(ConfigError::Invalid(m)) if m == "body_scan_days must be at most 36500")
+        );
     }
 
     #[test]

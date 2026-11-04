@@ -3,16 +3,16 @@ use std::process::ExitCode;
 const USAGE: &str = "usage: importin [serve | doctor [--anon] [--json] | --version]";
 
 fn main() -> ExitCode {
+    importin::log::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
-        None | Some("serve") if args.len() <= 1 => {
-            if let Err(e) = importin::config::load() {
+        None | Some("serve") if args.len() <= 1 => match serve() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
                 eprintln!("importin: {e}");
-                return ExitCode::from(1);
+                ExitCode::from(1)
             }
-            eprintln!("importin: serve not implemented");
-            ExitCode::from(2)
-        }
+        },
         Some("--version") if args.len() == 1 => {
             println!("importin {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
@@ -26,4 +26,9 @@ fn main() -> ExitCode {
             ExitCode::from(64)
         }
     }
+}
+
+fn serve() -> anyhow::Result<()> {
+    let config = importin::config::load()?;
+    tokio::runtime::Runtime::new()?.block_on(importin::tools::serve(config))
 }

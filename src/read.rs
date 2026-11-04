@@ -2,6 +2,7 @@
 //! Decrypted content lives only in the returned `Email`; nothing is cached or written.
 
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde::Serialize;
@@ -17,11 +18,21 @@ use crate::store::{self, StoreError};
 
 const HINT: &str = "narrow with after:, from: or mailbox:";
 
+/// `Send + Sync`, so one `Arc<Context>` serves concurrent requests.
 pub struct Context {
-    pub env: envelope::Envelope,
+    /// Behind a mutex: `rusqlite::Connection` is not `Sync`. Use [`Context::envelope`].
+    pub env: Mutex<envelope::Envelope>,
     pub locator: Locator,
     pub decryptor: Box<dyn Decryptor>,
     pub config: Config,
+}
+
+impl Context {
+    /// The Envelope Index, one query at a time; a poisoned lock is still usable (queries hold no
+    /// state between calls).
+    pub fn envelope(&self) -> MutexGuard<'_, envelope::Envelope> {
+        self.env.lock().unwrap_or_else(PoisonError::into_inner)
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -36,7 +47,7 @@ pub fn open(config: Config) -> Result<Context, OpenError> {
     let store = store::locate(&config.mail_root)?;
     let env = envelope::open(&store, &config.exclude_accounts)?;
     Ok(Context {
-        env,
+        env: Mutex::new(env),
         locator: Locator::new(store),
         decryptor: smime::from_config(&config.smime),
         config,
@@ -266,7 +277,7 @@ struct Loaded {
 }
 
 fn load(ctx: &Context, id: i64) -> Result<Loaded, ReadError> {
-    let row = ctx.env.get(id)?.ok_or(ReadError::NotFound(id))?;
+    let row = ctx.envelope().get(id)?.ok_or(ReadError::NotFound(id))?;
     let located =
         ctx.locator
             .locate(id, &row.mailbox_url)?
@@ -335,7 +346,7 @@ fn extract_one(
 /// every term, case-insensitively; enveloped messages are not decrypted and never match.
 pub fn search(ctx: &Context, f: &Filter) -> Result<SearchResult, ReadError> {
     if f.scope != Scope::Body {
-        let hits: Vec<SearchHit> = ctx.env.search(f)?.into_iter().map(hit).collect();
+        let hits: Vec<SearchHit> = ctx.envelope().search(f)?.into_iter().map(hit).collect();
         return Ok(SearchResult {
             truncated: hits.len() == f.limit,
             hits,
@@ -350,7 +361,7 @@ pub fn search(ctx: &Context, f: &Filter) -> Result<SearchResult, ReadError> {
     let after = f
         .after
         .unwrap_or_else(|| Utc::now() - Duration::days(i64::from(ctx.config.body_scan_days)));
-    let candidates = ctx.env.search(&Filter {
+    let candidates = ctx.envelope().search(&Filter {
         scope: Scope::Body,
         after: Some(after),
         limit: max,
@@ -386,7 +397,7 @@ pub fn search(ctx: &Context, f: &Filter) -> Result<SearchResult, ReadError> {
             }
             Err(e) => {
                 skipped += 1;
-                debug(&format!("body scan: message {}: {e}", row.id));
+                crate::debug!("body scan: message {}: {e}", row.id);
             }
         }
     }
@@ -418,7 +429,8 @@ fn body_text(ctx: &Context, row: &MessageRow) -> Result<Option<String>, ReadErro
     Ok(Some(parsed.body(usize::MAX, false).text))
 }
 
-fn hit(row: MessageRow) -> SearchHit {
+/// An index row in the `search` result shape (also `get_thread`'s).
+pub fn hit(row: MessageRow) -> SearchHit {
     let flags = Flags(row.flags as u64);
     SearchHit {
         encrypted: flags.encrypted(),
@@ -444,12 +456,4 @@ fn hit(row: MessageRow) -> SearchHit {
 
 fn is_pkcs7_mime(mime: &str) -> bool {
     mime == "application/pkcs7-mime" || mime == "application/x-pkcs7-mime"
-}
-
-/// To stderr when `IMPORTIN_LOG` is `debug` or `trace`.
-fn debug(msg: &str) {
-    let level = std::env::var("IMPORTIN_LOG").unwrap_or_default();
-    if level.eq_ignore_ascii_case("debug") || level.eq_ignore_ascii_case("trace") {
-        eprintln!("importin: {msg}");
-    }
 }
