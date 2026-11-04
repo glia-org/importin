@@ -466,3 +466,95 @@ fn strip_html_basic() {
     assert_eq!(strip_html("a<!-- <p>hidden</p> -->b"), "ab");
     assert_eq!(strip_html("1 < 2 and 3 > 2"), "1 < 2 and 3 > 2");
 }
+
+#[test]
+fn strip_html_decodes_named_entities() {
+    use mime::strip_html;
+    assert_eq!(strip_html("Gr&uuml;&szlig;e &euro; &rsquo;"), "Grüße € ’");
+    assert_eq!(
+        strip_html("&Auml;&Ouml;&Uuml;&auml;&ouml; &eacute;&egrave;&agrave;&ccedil;&ntilde;"),
+        "ÄÖÜäö éèàçñ"
+    );
+    assert_eq!(
+        strip_html(
+            "&pound;&copy;&reg;&trade; a&ndash;b&mdash;c &lsquo;x&rsquo; &ldquo;y&rdquo;&hellip;"
+        ),
+        "£©®™ a–b—c ‘x’ “y”…"
+    );
+    assert_eq!(
+        strip_html("&laquo;z&raquo; &bull; &middot; 5&deg; 2&times;3"),
+        "«z» • · 5° 2×3"
+    );
+    // Single pass: a decoded `&` does not start another entity.
+    assert_eq!(strip_html("&amp;uuml;"), "&uuml;");
+}
+
+#[test]
+fn enveloped_only_at_the_top_level() {
+    let raw = b"From: a@example.test\nContent-Type: multipart/mixed; boundary=\"mix\"\n\n\
+--mix\nContent-Type: text/plain\n\nan encrypted file is attached\n\
+--mix\nContent-Type: application/pkcs7-mime; smime-type=enveloped-data; name=\"smime.p7m\"\n\
+Content-Disposition: attachment; filename=\"smime.p7m\"\nContent-Transfer-Encoding: base64\n\nMAMCAQA=\n\
+--mix--\n";
+    let parsed = mime::parse(raw).unwrap();
+    assert!(!parsed.is_enveloped());
+    assert!(!parsed.is_auth_enveloped());
+    assert_eq!(parsed.enveloped_der(), None);
+    let atts = parsed.attachments(None);
+    assert_eq!(atts.len(), 1);
+    assert_eq!(
+        (
+            atts[0].part.as_str(),
+            atts[0].filename.as_str(),
+            atts[0].mime_type.as_str()
+        ),
+        ("2", "smime.p7m", "application/pkcs7-mime")
+    );
+}
+
+#[test]
+fn body_truncates_html_too() {
+    let raw = b"From: a@example.test\nContent-Type: multipart/alternative; boundary=\"alt\"\n\n\
+--alt\nContent-Type: text/plain; charset=utf-8\n\nshort\n\
+--alt\nContent-Type: text/html; charset=utf-8\n\n<p>Gr\xc3\xbc\xc3\x9fe</p>\n\
+--alt--\n";
+    let parsed = mime::parse(raw).unwrap();
+    // The text fits, the HTML does not: cut on a char boundary, flagged.
+    let body = parsed.body(6, true);
+    assert_eq!(body.text.trim(), "short");
+    assert_eq!(body.html.as_deref(), Some("<p>Grü"));
+    assert!(body.truncated);
+    // Without the HTML only the text counts.
+    let body = parsed.body(6, false);
+    assert_eq!(body.html, None);
+    assert!(!body.truncated);
+    // Both fit.
+    let body = parsed.body(1000, true);
+    assert_eq!(body.html.as_deref().map(str::trim), Some("<p>Grüße</p>"));
+    assert!(!body.truncated);
+}
+
+#[test]
+fn external_bytes_over_the_cap_are_refused() {
+    let fx = fixture::build(Epoch::Unix);
+    let m = load(&fx, fx.ids.partial_external);
+    let parsed = mime::parse(&m.raw).unwrap();
+    let max = emlx::MAX_EMLX_BYTES;
+    fs::create_dir_all(m.dir.join("3")).unwrap();
+    let big = fs::File::create(m.dir.join("3").join("big.bin")).unwrap();
+    big.set_len(max + 1).unwrap(); // sparse: no disk blocks written
+    let crafted = info("3", "big.bin", AttachmentState::External);
+    match parsed.attachment_bytes(&crafted, Some(&m.dir)) {
+        Err(MimeError::TooLarge { bytes, max: m }) => assert_eq!((bytes, m), (max + 1, max)),
+        other => panic!("expected TooLarge, got {:?}", other.map(|b| b.len())),
+    }
+    // Exactly at the cap is still read.
+    big.set_len(max).unwrap();
+    assert_eq!(
+        parsed
+            .attachment_bytes(&crafted, Some(&m.dir))
+            .unwrap()
+            .len() as u64,
+        max
+    );
+}

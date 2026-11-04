@@ -12,6 +12,7 @@ use chrono::{DateTime, FixedOffset};
 use mail_parser::{AddressList, MessageParser, MessagePart};
 use serde::Serialize;
 
+use crate::emlx::MAX_EMLX_BYTES;
 use crate::envelope::Address;
 
 #[derive(Debug, thiserror::Error)]
@@ -24,6 +25,8 @@ pub enum MimeError {
     Unavailable(AttachmentState),
     #[error("attachment path leaves the attachment directory: {}", .0.display())]
     Unsafe(PathBuf),
+    #[error("attachment is {bytes} bytes, over the {max}-byte limit")]
+    TooLarge { bytes: u64, max: u64 },
     #[error("attachment file: {0}")]
     Io(#[from] io::Error),
 }
@@ -69,7 +72,7 @@ pub enum BodySource {
 pub struct Body {
     pub text: String,
     pub source: BodySource,
-    /// The raw HTML part, when asked for and present.
+    /// The raw HTML part, when asked for and present, cut at `max_chars` like `text`.
     pub html: Option<String>,
     pub truncated: bool,
 }
@@ -135,7 +138,7 @@ impl<'a> Parsed<'a> {
     }
 
     /// The first text/plain part, else the first text/html part stripped. Parts with a filename or
-    /// an attachment disposition are attachments, not body.
+    /// an attachment disposition are attachments, not body. `truncated`: text or html was cut.
     pub fn body(&self, max_chars: usize, want_html: bool) -> Body {
         let leaves = self.leaves();
         let first = |mime: &str| {
@@ -151,12 +154,19 @@ impl<'a> Parsed<'a> {
             (None, Some(h)) => (strip_html(h), BodySource::Html),
             (None, None) => (String::new(), BodySource::None),
         };
-        let (text, truncated) = truncate(text, max_chars);
+        let (text, text_cut) = truncate(text, max_chars);
+        let (html, html_cut) = match html.filter(|_| want_html) {
+            Some(h) => {
+                let (h, cut) = truncate(h.into_owned(), max_chars);
+                (Some(h), cut)
+            }
+            None => (None, false),
+        };
         Body {
             text,
             source,
-            html: html.filter(|_| want_html).map(|h| h.into_owned()),
-            truncated,
+            html,
+            truncated: text_cut || html_cut,
         }
     }
 
@@ -206,6 +216,13 @@ impl<'a> Parsed<'a> {
                 };
                 let dir = attachments_dir.ok_or_else(missing)?;
                 let path = find_external(dir, &info.part, &info.filename)?.ok_or_else(missing)?;
+                let bytes = fs::metadata(&path)?.len();
+                if bytes > MAX_EMLX_BYTES {
+                    return Err(MimeError::TooLarge {
+                        bytes,
+                        max: MAX_EMLX_BYTES,
+                    });
+                }
                 Ok(fs::read(path)?)
             }
             state => Err(MimeError::Unavailable(state)),
@@ -243,19 +260,19 @@ impl<'a> Parsed<'a> {
         root.children().next().map(|p| p.raw())
     }
 
-    /// A pkcs7-mime part with smime-type enveloped-data or authEnveloped-data, or without an
-    /// smime-type and named `smime.p7m`. The name alone does not decide: RFC 5751 names
-    /// signed-data `smime.p7m` too.
+    /// The root part, when it is pkcs7-mime with smime-type enveloped-data or authEnveloped-data,
+    /// or without an smime-type and named `smime.p7m`. The name alone does not decide: RFC 5751
+    /// names signed-data `smime.p7m` too. A `.p7m` deeper in the tree is an attachment.
     fn enveloped_part(&self) -> Option<MessagePart<'_>> {
-        self.leaves().into_iter().map(|l| l.part).find(|p| {
-            is_pkcs7_mime(&mime_type(p))
-                && match smime_type(p).as_deref() {
-                    Some(t) => t == "enveloped-data" || t == "authenveloped-data",
-                    None => p
-                        .attachment_name()
-                        .is_some_and(|n| n.eq_ignore_ascii_case("smime.p7m")),
-                }
-        })
+        let root = self.msg.root_part();
+        let enveloped = is_pkcs7_mime(&mime_type(&root))
+            && match smime_type(&root).as_deref() {
+                Some(t) => t == "enveloped-data" || t == "authenveloped-data",
+                None => root
+                    .attachment_name()
+                    .is_some_and(|n| n.eq_ignore_ascii_case("smime.p7m")),
+            };
+        enveloped.then_some(root)
     }
 
     fn leaves(&self) -> Vec<Leaf<'_>> {
@@ -470,9 +487,11 @@ fn decode_entities(s: &str) -> String {
     while let Some(amp) = rest.find('&') {
         out.push_str(&rest[..amp]);
         let tail = &rest[amp..];
+        // The longest HTML5 entity name has 31 characters; look no further for the `;`.
         let decoded = tail[1..]
-            .find(';')
-            .filter(|&semi| semi <= 10)
+            .bytes()
+            .take(33)
+            .position(|b| b == b';')
             .and_then(|semi| entity(&tail[1..1 + semi]).map(|c| (c, semi + 2)));
         match decoded {
             Some((c, len)) => {
@@ -489,23 +508,16 @@ fn decode_entities(s: &str) -> String {
     out
 }
 
+/// `&nbsp;` as a plain space; every other named (HTML5 table) or numeric entity through
+/// mail-parser, which hands the token back unchanged when it is not one.
 fn entity(name: &str) -> Option<char> {
-    match name {
-        "amp" => Some('&'),
-        "lt" => Some('<'),
-        "gt" => Some('>'),
-        "quot" => Some('"'),
-        "apos" => Some('\''),
-        "nbsp" => Some(' '),
-        _ => {
-            let num = name.strip_prefix('#')?;
-            let code = match num.strip_prefix(['x', 'X']) {
-                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
-                None => num.parse().ok()?,
-            };
-            char::from_u32(code)
-        }
+    if name == "nbsp" {
+        return Some(' ');
     }
+    let token = format!("&{name};");
+    let mut out = String::new();
+    mail_parser::add_html_token(&mut out, token.as_bytes(), false);
+    (out != token).then(|| out.chars().next()).flatten()
 }
 
 fn tidy(s: &str) -> String {
