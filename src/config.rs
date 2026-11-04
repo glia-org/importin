@@ -114,7 +114,9 @@ pub fn parse(toml_text: &str, env: &HashMap<String, String>) -> Result<Config, C
     let raw: RawConfig = toml::from_str(toml_text).map_err(|e| {
         let msg = e.message();
         match msg.strip_prefix("unknown field `") {
-            Some(rest) => ConfigError::UnknownKey(rest.split('`').next().unwrap_or(rest).to_string()),
+            Some(rest) => {
+                ConfigError::UnknownKey(rest.split('`').next().unwrap_or(rest).to_string())
+            }
             None => ConfigError::Parse(e),
         }
     })?;
@@ -176,13 +178,19 @@ mod tests {
 
     #[test]
     fn unknown_key_is_error() {
-        assert!(matches!(parse("foo = 1", &no_env()), Err(ConfigError::UnknownKey(_))));
+        assert!(matches!(
+            parse("foo = 1", &no_env()),
+            Err(ConfigError::UnknownKey(_))
+        ));
     }
 
     #[test]
     fn smime_openssl_needs_key_and_cert() {
-        let r = parse("[smime]
-decryptor = \"openssl\"", &no_env());
+        let r = parse(
+            "[smime]
+decryptor = \"openssl\"",
+            &no_env(),
+        );
         assert!(matches!(r, Err(ConfigError::Invalid(_))));
     }
 
