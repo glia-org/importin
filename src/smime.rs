@@ -46,10 +46,19 @@ pub struct SecurityCms {
 }
 
 impl SecurityCms {
-    fn decode(&self, der: &[u8]) -> Result<Vec<u8>, DecryptError> {
+    /// `security cms -D`, DER on stdin; `probe_only` adds `-n`, which suppresses the content (the
+    /// `doctor` probe). The one place these arguments are built.
+    pub fn command(probe_only: bool) -> Command {
         let mut cmd = Command::new("/usr/bin/security");
         cmd.args(["cms", "-D"]);
-        run(cmd, der, self.timeout)
+        if probe_only {
+            cmd.arg("-n");
+        }
+        cmd
+    }
+
+    fn decode(&self, der: &[u8]) -> Result<Vec<u8>, DecryptError> {
+        run(Self::command(false), der, self.timeout)
     }
 }
 

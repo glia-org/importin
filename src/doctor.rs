@@ -6,21 +6,27 @@
 use std::fmt::Display;
 use std::path::Path;
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, FixedOffset, Local};
 use serde::Serialize;
 
 use crate::config::{Config, DecryptorKind};
-use crate::emlx;
+use crate::emlx::{self, Flags};
 use crate::envelope::{
     AccountInfo, Counts, Filter, MessageRow, OpenMode, Scope, parse_mailbox_url,
 };
 use crate::mime;
 use crate::paths::Resolution;
 use crate::read::{self, Context, ReadError};
-use crate::smime::{self, DecryptError};
+use crate::smime::{self, DecryptError, SecurityCms};
 use crate::store::{self, StoreError};
+
+/// Long enough for a click in the keychain's access dialog.
+const PROBE_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// What the literal mail root becomes in `--anon` text.
+const ROOT: &str = "<root>";
 
 #[derive(Debug, Serialize)]
 pub struct SchemaReport {
@@ -70,6 +76,8 @@ pub struct Timings {
 #[derive(Debug, Serialize)]
 pub struct Report {
     pub version: String,
+    /// Built with `--anon`.
+    pub anon: bool,
     pub mail_root: String,
     pub version_dir: Option<String>,
     /// "ok" | "missing or denied" | "undetermined"
@@ -116,6 +124,7 @@ impl Default for Options {
 pub fn run(config: &Config, opts: &Options) -> Report {
     let mut r = Report {
         version: env!("CARGO_PKG_VERSION").into(),
+        anon: opts.anon,
         mail_root: config.mail_root.display().to_string(),
         version_dir: None,
         full_disk_access: "undetermined",
@@ -248,10 +257,12 @@ fn check_index(ctx: &Context, sample: usize, r: &mut Report) {
         (rows, encrypted)
     };
 
+    let mut plain = None;
     if let Some(rows) = &rows {
-        let (paths, flags) = sample_files(ctx, rows);
+        let (paths, flags, id) = sample_files(ctx, rows);
         r.path_sample = Some(paths);
         r.flag_check = Some(flags);
+        plain = id;
     }
 
     let start = Instant::now();
@@ -260,10 +271,10 @@ fn check_index(ctx: &Context, sample: usize, r: &mut Report) {
         r.timings_ms.search_header = Some(start.elapsed().as_millis());
     }
 
-    if let Some(row) = rows.as_ref().and_then(|rows| rows.first()) {
+    if let Some(id) = plain {
         let start = Instant::now();
         // The email is dropped unread.
-        let email = read::get_email(ctx, row.id, 20_000, false).map_err(|e| match e {
+        let email = read::get_email(ctx, id, 20_000, false).map_err(|e| match e {
             // Without the mailbox name, which the anonymised report must not show.
             ReadError::FileMissing { id, .. } => format!("message {id}: no file"),
             e => e.to_string(),
@@ -276,7 +287,9 @@ fn check_index(ctx: &Context, sample: usize, r: &mut Report) {
     r.decrypt_probe = Some(decrypt_probe(ctx, encrypted.as_ref(), &mut r.errors));
 }
 
-fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck) {
+/// Also returns the newest row neither flagged encrypted in the index nor enveloped: the get_email
+/// timing sample, so that only the probe touches the keychain.
+fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck, Option<i64>) {
     let mut paths = PathSample {
         sampled: rows.len(),
         formula: 0,
@@ -288,6 +301,7 @@ fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck) {
         encrypted_flag_and_type_agree: 0,
         disagree: 0,
     };
+    let mut plain = None;
     for row in rows {
         let Ok(Some(located)) = ctx.locator.locate(row.id, &row.mailbox_url) else {
             paths.missing += 1;
@@ -308,8 +322,11 @@ fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck) {
         } else {
             flags.disagree += 1;
         }
+        if plain.is_none() && !Flags(row.flags as u64).encrypted() && !parsed.is_enveloped() {
+            plain = Some(row.id);
+        }
     }
-    (paths, flags)
+    (paths, flags, plain)
 }
 
 fn enveloped_der(ctx: &Context, row: &MessageRow) -> anyhow::Result<Vec<u8>> {
@@ -347,11 +364,8 @@ fn decrypt_probe(
     };
     let start = Instant::now();
     let result = match ctx.config.smime.decryptor {
-        DecryptorKind::Security => {
-            let mut cmd = Command::new("/usr/bin/security");
-            cmd.args(["cms", "-D", "-n"]);
-            smime::run(cmd, &der, smime::TIMEOUT)
-        }
+        DecryptorKind::Security => smime::run(SecurityCms::command(true), &der, PROBE_TIMEOUT),
+        // No dialog can wait here: the decryptor's own timeout.
         DecryptorKind::Openssl => ctx.decryptor.decrypt(&der),
     };
     probe.ms = start.elapsed().as_millis();
@@ -393,7 +407,7 @@ fn count_identities(text: &str) -> u32 {
 }
 
 fn anonymise(r: &mut Report) {
-    r.mail_root = "<redacted>".into();
+    let root = std::mem::replace(&mut r.mail_root, "<redacted>".into());
     r.version_dir = r.version_dir.as_deref().map(|v| {
         Path::new(v)
             .file_name()
@@ -407,28 +421,54 @@ fn anonymise(r: &mut Report) {
         n => vec![format!("<{n} patterns>")],
     };
     for e in &mut r.errors {
-        *e = scrub(e);
+        *e = scrub(e, &root);
     }
+    // The status carries the signal; later lines may name certificates.
     if let Some(p) = &mut r.decrypt_probe {
-        p.stderr = scrub(&p.stderr);
+        p.stderr = scrub(p.stderr.lines().next().unwrap_or_default(), &root);
     }
 }
 
-/// The `--anon` filter for free text: drops the path components after each `Mail/` (up to a `:`,
-/// quote or line end), replaces every whitespace-separated token holding an `@` by `<addr>`, and
-/// writes the home directory as `~`.
-pub fn scrub(text: &str) -> String {
+/// The `--anon` filter for free text. The literal `mail_root` becomes `<root>`. A path (from `<root>`,
+/// or from a `/` or `~/` that starts a word) or a URL (`scheme://` starting a word) runs to the next
+/// `": "` or line end and becomes `<root>` / `<root>/…`, `<path>` or `<url>`; spaces in folder
+/// names stay inside it. Then every whitespace-separated token holding an `@` becomes `<addr>`.
+pub fn scrub(text: &str, mail_root: &str) -> String {
+    let text = match mail_root {
+        "" => text.to_string(),
+        root => text.replace(root, ROOT),
+    };
     let mut out = String::new();
-    let mut rest = text;
-    while let Some(i) = rest.find("Mail/") {
-        let (head, tail) = rest.split_at(i + "Mail/".len());
-        out.push_str(head);
-        out.push('…');
-        rest = &tail[tail.find([':', '"', '\'', '\n']).unwrap_or(tail.len())..];
+    let mut rest = text.as_str();
+    let mut word_start = true;
+    while let Some(c) = rest.chars().next() {
+        let kind = if rest.starts_with(ROOT) {
+            Some(ROOT)
+        } else if word_start {
+            span_kind(rest)
+        } else {
+            None
+        };
+        if let Some(kind) = kind {
+            let end = [rest.find(": "), rest.find('\n')]
+                .into_iter()
+                .flatten()
+                .min()
+                .unwrap_or(rest.len());
+            out.push_str(if kind == ROOT && end > ROOT.len() {
+                "<root>/…"
+            } else {
+                kind
+            });
+            rest = &rest[end..];
+            word_start = false;
+            continue;
+        }
+        out.push(c);
+        word_start = c.is_whitespace() || "\"'([=,:".contains(c);
+        rest = &rest[c.len_utf8()..];
     }
-    out.push_str(rest);
-    let mut out: String = out
-        .split_inclusive(char::is_whitespace)
+    out.split_inclusive(char::is_whitespace)
         .map(|piece| {
             let token = piece.trim_end_matches(char::is_whitespace);
             if token.contains('@') {
@@ -437,11 +477,20 @@ pub fn scrub(text: &str) -> String {
                 piece.to_string()
             }
         })
-        .collect();
-    if let Some(home) = dirs::home_dir() {
-        out = out.replace(&format!("{}/", home.display()), "~/");
+        .collect()
+}
+
+/// `<path>` for `/…` or `~/…`, `<url>` for `scheme://…`.
+fn span_kind(s: &str) -> Option<&'static str> {
+    if s.starts_with('/') || s.starts_with("~/") {
+        return Some("<path>");
     }
-    out
+    let scheme = &s[..s.find("://")?];
+    let is_scheme = !scheme.is_empty()
+        && scheme
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"+-.".contains(&b));
+    is_scheme.then_some("<url>")
 }
 
 pub fn render(r: &Report, json: bool) -> String {
@@ -510,7 +559,9 @@ pub fn render(r: &Report, json: bool) -> String {
     } else {
         line("ok", "excluded accounts", r.excluded_accounts.join(", "));
     }
-    if r.accounts.is_empty() {
+    if r.anon {
+        line("--", "accounts", "redacted".into());
+    } else if r.accounts.is_empty() {
         line("--", "accounts", "none listed".into());
     } else {
         let accounts: Vec<String> = r

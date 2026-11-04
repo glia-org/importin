@@ -118,28 +118,149 @@ fn anon_report_has_no_addresses() {
     for needle in ["@", "example.test", "paul"] {
         assert!(!json.contains(needle), "{needle:?} in {json}");
     }
+    assert!(r.anon);
+    let text = doctor::render(&r, false);
+    assert!(text.contains("--   accounts: redacted"), "{text}");
 }
 
 #[test]
-fn anon_errors_lose_the_path_after_mail() {
-    let (_dir, r) = missing_root_report(true);
-    assert!(!r.errors.is_empty());
-    for e in &r.errors {
-        assert!(!e.contains("secret-box"), "{e}");
-        assert!(e.contains("Mail/…"), "{e}");
+fn anon_errors_hide_the_mail_root() {
+    let dir = tempfile::tempdir().unwrap();
+    // Missing roots name themselves; a root with a V10 but no Envelope Index names a path below it.
+    let under_mail = dir.path().join("Mail").join("secret-box");
+    let custom = dir.path().join("custom root").join("store");
+    let bare = dir.path().join("bare root");
+    std::fs::create_dir_all(bare.join("V10")).unwrap();
+    let dir_text = dir.path().display().to_string();
+    for root in [&under_mail, &custom, &bare] {
+        let plain = doctor::run(&config_at(root), &Options::default());
+        let root_text = root.display().to_string();
+        assert!(
+            plain.errors.iter().any(|e| e.contains(&root_text)),
+            "{:?}",
+            plain.errors
+        );
+
+        let opts = Options {
+            anon: true,
+            ..Options::default()
+        };
+        let r = doctor::run(&config_at(root), &opts);
+        assert!(
+            r.errors.iter().any(|e| e.contains("<root>")),
+            "{:?}",
+            r.errors
+        );
+        for e in &r.errors {
+            for gone in [
+                &dir_text[..],
+                "secret-box",
+                "custom root",
+                "bare root",
+                "V10",
+                "MailData",
+            ] {
+                assert!(!e.contains(gone), "{gone:?} in {e}");
+            }
+        }
     }
-    let (_dir, plain) = missing_root_report(false);
-    assert!(plain.errors.iter().any(|e| e.contains("Mail/secret-box")));
 }
 
 #[test]
-fn anon_scrub_hides_addresses_and_paths() {
-    let home = std::env::var("HOME").unwrap();
-    let text = format!(
-        "{home}/Library/Mail/V10/MailData/Envelope Index: denied\nrecipient <paul@example.test> not found"
+fn anon_scrub_hides_paths_urls_and_addresses() {
+    let root = "/srv/mail store of paul";
+    let cases = [
+        (
+            "/srv/mail store of paul/V10/ABCD/Private.mbox/x.emlx: denied",
+            "<root>/…: denied",
+        ),
+        ("/srv/mail store of paul: missing", "<root>: missing"),
+        (
+            "open /Volumes/Private Disk/keys/my key.pem: no such file",
+            "open <path>: no such file",
+        ),
+        (
+            "~/Documents/secret plan.txt: unreadable",
+            "<path>: unreadable",
+        ),
+        (
+            "message 7: no file in mailbox://4F3B2A10-8C1D-4E5F-9A6B-7C8D9E0F1A2B/Bewerbung Müller",
+            "message 7: no file in <url>",
+        ),
+        (
+            "url \"imap://paul%40example.test@mail.example.test/INBOX/Private Stuff\": bad",
+            "url \"<url>: bad",
+        ),
+        (
+            "recipient <someone@example.test> unknown\nsee and/or 1/2",
+            "recipient <addr> unknown\nsee and/or 1/2",
+        ),
+    ];
+    let mut all = String::new();
+    for (text, want) in cases {
+        let got = doctor::scrub(text, root);
+        assert_eq!(got, want, "{text}");
+        all += &got;
+    }
+    for gone in [
+        "mail store",
+        "paul",
+        "ABCD",
+        "Private",
+        "my key",
+        "secret plan",
+        "4F3B2A10",
+        "Bewerbung",
+        "Müller",
+        "example.test",
+        "someone",
+        "@",
+    ] {
+        assert!(!all.contains(gone), "{gone:?} in {all}");
+    }
+}
+
+#[test]
+fn anon_probe_stderr_is_one_scrubbed_line() {
+    let fx = fixture::build(Epoch::Unix);
+    let Some(keys) = &fx.smime else {
+        return;
+    };
+    // A certificate is no private key: openssl fails, naming the file.
+    let mut c = config(&fx);
+    c.smime.key = Some(keys.cert.clone());
+    let opts = Options {
+        anon: true,
+        ..Options::default()
+    };
+    let p = doctor::run(&c, &opts).decrypt_probe.unwrap();
+    assert!(p.tried && !p.ok);
+    assert!(!p.stderr.contains('\n'), "{}", p.stderr);
+    let dir_text = fx.dir.path().display().to_string();
+    assert!(
+        !p.stderr.contains(&dir_text) && !p.stderr.contains("cert.pem"),
+        "{}",
+        p.stderr
     );
-    let s = doctor::scrub(&text);
-    assert_eq!(s, "~/Library/Mail/…: denied\nrecipient <addr> not found");
+}
+
+#[test]
+fn get_email_timing_skips_encrypted_messages() {
+    let fx = fixture::build(Epoch::Unix);
+    let index = fx.mail_root.join("V10/MailData/Envelope Index");
+    rusqlite::Connection::open(index)
+        .unwrap()
+        .execute("UPDATE messages SET flags = flags | 8", [])
+        .unwrap();
+    let r = doctor::run(&config(&fx), &Options::default());
+    assert!(r.timings_ms.get_email.is_none());
+    assert!(
+        r.errors.iter().all(|e| !e.starts_with("get_email")),
+        "{:?}",
+        r.errors
+    );
+    let text = doctor::render(&r, false);
+    assert!(text.contains("--   time get_email"), "{text}");
 }
 
 #[test]

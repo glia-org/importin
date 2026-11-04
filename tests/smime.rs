@@ -310,6 +310,19 @@ fn security_cms_spawns() {
 }
 
 #[test]
+fn security_cms_command_is_shared() {
+    let args = |probe_only| {
+        let cmd = SecurityCms::command(probe_only);
+        assert_eq!(cmd.get_program(), "/usr/bin/security");
+        cmd.get_args()
+            .map(|a| a.to_str().unwrap().to_string())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(args(false), ["cms", "-D"]);
+    assert_eq!(args(true), ["cms", "-D", "-n"]);
+}
+
+#[test]
 fn from_config_picks_the_decryptor() {
     let mut cfg = SmimeConfig {
         decryptor: DecryptorKind::Security,
