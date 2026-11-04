@@ -74,3 +74,22 @@ fn fixture_has_expected_counts() {
         .unwrap();
     assert_eq!(rcpts, 4);
 }
+
+#[test]
+fn cc_target_cc_and_bcc_appear_in_no_other_message() {
+    let fx = fixture::build(Epoch::Unix);
+    let db = fx.mail_root.join("V10/MailData/Envelope Index");
+    let conn = Connection::open_with_flags(&db, OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+    for addr in ["carol@example.test", "dave@example.test"] {
+        let others: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM messages m JOIN addresses a ON a.address = ?1 \
+                 WHERE m.ROWID != ?2 AND (m.sender = a.ROWID OR EXISTS \
+                 (SELECT 1 FROM recipients r WHERE r.message = m.ROWID AND r.address = a.ROWID))",
+                rusqlite::params![addr, fx.ids.cc_target],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(others, 0, "{addr} appears outside cc_target");
+    }
+}
