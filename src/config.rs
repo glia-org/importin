@@ -32,6 +32,9 @@ pub struct SmimeConfig {
 #[derive(Debug, Clone)]
 pub struct Config {
     pub mail_root: PathBuf,
+    /// The Accounts database that labels `mailbox://` accounts: `IMPORTIN_ACCOUNTS_DB`, else
+    /// [`crate::accounts::default_path`]. Not a config-file key.
+    pub accounts_db: PathBuf,
     pub exclude_accounts: Vec<String>,
     pub body_scan_days: u32,
     pub body_scan_max: usize,
@@ -124,6 +127,9 @@ pub fn parse(toml_text: &str, env: &HashMap<String, String>) -> Result<Config, C
         Some(v) => expand(v),
         None => expand(&raw.mail_root),
     };
+    let accounts_db = env
+        .get("IMPORTIN_ACCOUNTS_DB")
+        .map_or_else(crate::accounts::default_path, |v| expand(v));
     let smime = SmimeConfig {
         decryptor: raw.smime.decryptor,
         key: raw.smime.key.as_deref().map(expand),
@@ -142,6 +148,7 @@ pub fn parse(toml_text: &str, env: &HashMap<String, String>) -> Result<Config, C
     }
     Ok(Config {
         mail_root,
+        accounts_db,
         exclude_accounts: raw.exclude_accounts,
         body_scan_days: raw.body_scan_days,
         body_scan_max: raw.body_scan_max,
@@ -162,6 +169,7 @@ mod tests {
     fn defaults_when_empty() {
         let c = parse("", &no_env()).unwrap();
         assert!(c.mail_root.ends_with("Library/Mail"));
+        assert!(c.accounts_db.ends_with("Library/Accounts/Accounts4.sqlite"));
         assert!(c.exclude_accounts.is_empty());
         assert_eq!(c.body_scan_days, 90);
         assert_eq!(c.body_scan_max, 500);
@@ -174,6 +182,16 @@ mod tests {
         let env = HashMap::from([("IMPORTIN_MAIL_ROOT".to_string(), "/tmp/x".to_string())]);
         let c = parse("mail_root = \"/other\"", &env).unwrap();
         assert_eq!(c.mail_root, PathBuf::from("/tmp/x"));
+    }
+
+    #[test]
+    fn env_overrides_accounts_db() {
+        let env = HashMap::from([(
+            "IMPORTIN_ACCOUNTS_DB".to_string(),
+            "/tmp/a.sqlite".to_string(),
+        )]);
+        let c = parse("", &env).unwrap();
+        assert_eq!(c.accounts_db, PathBuf::from("/tmp/a.sqlite"));
     }
 
     #[test]

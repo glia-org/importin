@@ -65,8 +65,8 @@ the defaults. An unknown key is an error at startup.
 
 ```toml
 mail_root = "~/Library/Mail"    # IMPORTIN_MAIL_ROOT overrides it
-exclude_accounts = []           # globs, e.g. ["*@gmail.com"], matched against user, host, user@host
-                                # and the account uuid; an excluded account is invisible to every tool
+exclude_accounts = []           # globs, e.g. ["*@gmail.com"] or ["Google"], matched against address,
+                                # account name, account type or uuid; excluded = invisible to every tool
 body_scan_days = 90             # default window of scope body, at most 36500
 body_scan_max = 500             # candidate cap of scope body
 
@@ -76,6 +76,15 @@ decryptor = "security"          # or "openssl"
 # cert = "~/.config/importin/smime-cert.pem"  # openssl only, required with it
 openssl_bin = "openssl"         # the openssl binary, looked up on PATH
 ```
+
+Account names come from the macOS Accounts database, `~/Library/Accounts/Accounts4.sqlite` (read-only;
+the Full Disk Access that opens Mail's store covers it; `IMPORTIN_ACCOUNTS_DB` points elsewhere). Mail's
+mailbox URLs name an account only by its uuid (`mailbox://<uuid>/INBOX`); importin looks the uuid up there
+and calls the account by its username when that is an address, else by its account name ("Google"), else
+by the uuid, which is also what happens when the database cannot be read. `exclude_accounts` patterns
+match, ignoring case, the address (user, host, `user@host` or username), the account name, the account
+type ("IMAP", "Google", "iCloud", "On My Device") or the uuid; `list_accounts` shows them as
+`identifier`, `label`, `kind` and `uuid`.
 
 Logs go to stderr only (stdout is the MCP channel); `IMPORTIN_LOG` = `error` | `warn` (default) | `info` |
 `debug` | `trace`.

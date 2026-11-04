@@ -11,15 +11,21 @@ use importin::envelope::{self, Filter, Scope};
 use importin::paths::Locator;
 use importin::read::{self, Context, Email, ReadError, SearchResult};
 use importin::store;
-use support::fixture::{self, Epoch, Fixture, Options};
+use support::fixture::{self, Epoch, Fixture, Options, UrlForm};
 
 const HINT: &str = "narrow with after:, from: or mailbox:";
 
 fn config(fx: &Fixture) -> Config {
-    let env = HashMap::from([(
-        "IMPORTIN_MAIL_ROOT".to_string(),
-        fx.mail_root.display().to_string(),
-    )]);
+    let env = HashMap::from([
+        (
+            "IMPORTIN_MAIL_ROOT".to_string(),
+            fx.mail_root.display().to_string(),
+        ),
+        (
+            "IMPORTIN_ACCOUNTS_DB".to_string(),
+            fx.accounts_db.display().to_string(),
+        ),
+    ]);
     config::parse("", &env).unwrap()
 }
 
@@ -64,7 +70,7 @@ fn ids(r: &SearchResult) -> Vec<i64> {
 
 fn emlx_path(fx: &Fixture, id: i64) -> std::path::PathBuf {
     let store = store::locate(&fx.mail_root).unwrap();
-    let url = envelope::open(&store, &[])
+    let url = envelope::open(&store, &[], &Default::default())
         .unwrap()
         .get(id)
         .unwrap()
@@ -355,4 +361,33 @@ fn missing_file_is_file_missing_error() {
     let r = read::search(&c, &filter(Scope::Body, &["quarterly"])).unwrap();
     assert!(r.hits.is_empty());
     assert_eq!(r.skipped, 1);
+}
+
+#[test]
+fn accounts_db_missing_or_unreadable_names_accounts_by_uuid() {
+    let fx = fixture::build_with(
+        Epoch::Unix,
+        Options {
+            url_form: UrlForm::MailboxUuid,
+            ..Options::default()
+        },
+    );
+    let names = |c: &Context| -> Vec<String> {
+        let accounts = c.envelope().accounts().unwrap();
+        accounts.into_iter().map(|a| a.identifier).collect()
+    };
+    assert_eq!(
+        names(&ctx(&fx)),
+        ["paul@example.test", "excluded@gmail.example"]
+    );
+
+    let garbage = fx.dir.path().join("garbage.sqlite");
+    fs::write(&garbage, b"not a database").unwrap();
+    for db in [fx.dir.path().join("no-such.sqlite"), garbage] {
+        let mut cfg = config(&fx);
+        cfg.accounts_db = db;
+        let c = read::open(cfg).unwrap();
+        assert_eq!(names(&c), [fixture::ACCOUNT_A, fixture::ACCOUNT_B]);
+        assert_eq!(email(&c, fx.ids.plain).account, fixture::ACCOUNT_A);
+    }
 }

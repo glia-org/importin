@@ -1,3 +1,4 @@
+pub mod accounts;
 pub mod attach;
 pub mod config;
 pub mod doctor;

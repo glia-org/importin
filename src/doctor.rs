@@ -1,7 +1,7 @@
 //! `importin doctor`: Full Disk Access, the store and its schema, path resolution and the flag bits on
 //! a sample, and the S/MIME decrypt probe (DESIGN §9). The report holds counts, booleans, timings,
-//! account identifiers and error text, never message content or subjects; `--anon` also drops the
-//! account identifiers, exclusion patterns and mail root, and scrubs paths and addresses from the text.
+//! account identifiers and labels, and error text, never message content or subjects; `--anon` also
+//! drops the accounts, exclusion patterns and mail root, and scrubs paths and addresses from the text.
 
 use std::fmt::Display;
 use std::path::Path;
@@ -568,10 +568,14 @@ pub fn render(r: &Report, json: bool) -> String {
             .accounts
             .iter()
             .map(|a| {
-                format!(
-                    "{} ({} mailboxes, {} messages)",
-                    a.identifier, a.mailboxes, a.messages
-                )
+                let mut about: Vec<&str> = [&a.label, &a.kind, &a.uuid]
+                    .into_iter()
+                    .flatten()
+                    .map(String::as_str)
+                    .collect();
+                let counts = format!("{} mailboxes, {} messages", a.mailboxes, a.messages);
+                about.push(&counts);
+                format!("{} ({})", a.identifier, about.join("; "))
             })
             .collect();
         line("ok", "accounts", accounts.join(", "));

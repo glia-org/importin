@@ -1,8 +1,10 @@
 mod support;
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use chrono::Utc;
+use importin::accounts::{self, AccountLabel};
 use importin::envelope::{
     self, Address, Envelope, EnvelopeError, Filter, MessageRow, OpenMode, Scope, parse_mailbox_url,
 };
@@ -12,11 +14,26 @@ use support::fixture::{self, Epoch, Fixture, Options, UrlForm};
 fn try_open(fx: &Fixture, exclude: &[&str]) -> Result<Envelope, EnvelopeError> {
     let s = store::locate(&fx.mail_root).unwrap();
     let ex: Vec<String> = exclude.iter().map(|p| p.to_string()).collect();
-    envelope::open(&s, &ex)
+    envelope::open(&s, &ex, &Default::default())
 }
 
 fn open(fx: &Fixture, exclude: &[&str]) -> Envelope {
     try_open(fx, exclude).unwrap()
+}
+
+/// With the account labels of the fixture's Accounts database.
+fn open_labelled(fx: &Fixture, exclude: &[&str]) -> Envelope {
+    let s = store::locate(&fx.mail_root).unwrap();
+    let ex: Vec<String> = exclude.iter().map(|p| p.to_string()).collect();
+    envelope::open(&s, &ex, &accounts::load(&fx.accounts_db).unwrap()).unwrap()
+}
+
+fn uuid_fixture() -> Fixture {
+    let opts = Options {
+        url_form: UrlForm::MailboxUuid,
+        ..Options::default()
+    };
+    fixture::build_with(Epoch::Unix, opts)
 }
 
 /// Writes to the fixture's own synthetic index (never the real store), before an `Envelope` opens it.
@@ -625,4 +642,100 @@ fn from_filter_narrows_any_scope() {
     let mut f = filter(Scope::Body, &[]);
     f.from = Some("alice_example".into());
     assert!(env.search(&f).unwrap().is_empty());
+}
+
+#[test]
+fn mailbox_uuid_accounts_are_named_by_their_labels() {
+    let fx = uuid_fixture();
+    let env = open_labelled(&fx, &[]);
+    let accounts = env.accounts().unwrap();
+    let names: Vec<&str> = accounts.iter().map(|a| a.identifier.as_str()).collect();
+    assert_eq!(names, ["paul@example.test", "excluded@gmail.example"]);
+    let a = &accounts[0];
+    assert_eq!(a.label.as_deref(), Some("Example"));
+    assert_eq!(a.kind.as_deref(), Some("IMAP"));
+    assert_eq!(a.uuid.as_deref(), Some(fixture::ACCOUNT_A));
+    assert_eq!((a.user.as_str(), a.host.as_str()), ("", ""));
+    assert_eq!((a.mailboxes, a.scheme.as_str()), (4, "mailbox"));
+    assert_eq!(accounts[1].label.as_deref(), Some("Google"));
+
+    let m = env.get(fx.ids.plain).unwrap().unwrap();
+    assert_eq!(m.account, "paul@example.test");
+    assert_eq!(
+        env.get(fx.ids.excluded).unwrap().unwrap().account,
+        "excluded@gmail.example"
+    );
+    let boxes = env.mailboxes(Some("PAUL@")).unwrap();
+    assert_eq!(boxes.len(), 4);
+    assert!(boxes.iter().all(|b| b.account == "paul@example.test"));
+    let mut f = filter(Scope::Body, &[]);
+    f.account = Some("gmail".into());
+    assert_eq!(ids(&env.search(&f).unwrap()), [117, 129, 130, 131]);
+
+    // Without labels the same store names its accounts by uuid.
+    let bare = open(&fx, &[]);
+    let names: Vec<String> = bare
+        .accounts()
+        .unwrap()
+        .into_iter()
+        .map(|a| a.identifier)
+        .collect();
+    assert_eq!(names, [fixture::ACCOUNT_A, fixture::ACCOUNT_B]);
+    assert!(
+        bare.accounts()
+            .unwrap()
+            .iter()
+            .all(|a| a.label.is_none() && a.kind.is_none())
+    );
+}
+
+#[test]
+fn exclusion_matches_label_username_description_and_kind() {
+    let fx = uuid_fixture();
+    for pattern in ["*@gmail.example", "Google", "google"] {
+        let env = open_labelled(&fx, &[pattern]);
+        assert!(env.get(fx.ids.excluded).unwrap().is_none(), "{pattern}");
+        let accounts = env.accounts().unwrap();
+        assert_eq!(accounts.len(), 1, "{pattern}");
+        assert_eq!(accounts[0].identifier, "paul@example.test", "{pattern}");
+        assert_eq!(env.count().unwrap().excluded_messages, 4, "{pattern}");
+    }
+    // The account type: every IMAP account.
+    let env = open_labelled(&fx, &["imap"]);
+    assert!(env.get(fx.ids.plain).unwrap().is_none());
+    assert!(env.get(fx.ids.excluded).unwrap().is_some());
+    // No label, nothing but the uuid to match.
+    let env = open(&fx, &["Google"]);
+    assert!(env.get(fx.ids.excluded).unwrap().is_some());
+}
+
+#[test]
+fn identifier_falls_back_to_description_then_uuid() {
+    let fx = uuid_fixture();
+    let label = |uuid: &str, username: Option<&str>, description: Option<&str>| AccountLabel {
+        uuid: uuid.into(),
+        username: username.map(Into::into),
+        description: description.map(Into::into),
+        kind: None,
+    };
+    // Username without `@`: the description; neither: the uuid.
+    let labels = HashMap::from([
+        (
+            fixture::ACCOUNT_A.to_string(),
+            label(fixture::ACCOUNT_A, Some("paul"), Some("Work")),
+        ),
+        (
+            fixture::ACCOUNT_B.to_string(),
+            label(fixture::ACCOUNT_B, None, None),
+        ),
+    ]);
+    let s = store::locate(&fx.mail_root).unwrap();
+    let env = envelope::open(&s, &[], &labels).unwrap();
+    let names: Vec<String> = env
+        .accounts()
+        .unwrap()
+        .into_iter()
+        .map(|a| a.identifier)
+        .collect();
+    assert_eq!(names, ["Work", fixture::ACCOUNT_B]);
 }

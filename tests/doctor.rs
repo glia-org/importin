@@ -11,17 +11,24 @@ use importin::doctor::{self, Options, Report};
 use serde_json::Value;
 use support::fixture::{self, Epoch, Fixture, Options as FixtureOptions, UrlForm};
 
-fn config_at(mail_root: &Path) -> Config {
-    let env = HashMap::from([(
-        "IMPORTIN_MAIL_ROOT".to_string(),
-        mail_root.display().to_string(),
-    )]);
+/// `accounts_db` keeps the tests off the real `~/Library/Accounts`; it need not exist.
+fn config_at(mail_root: &Path, accounts_db: &Path) -> Config {
+    let env = HashMap::from([
+        (
+            "IMPORTIN_MAIL_ROOT".to_string(),
+            mail_root.display().to_string(),
+        ),
+        (
+            "IMPORTIN_ACCOUNTS_DB".to_string(),
+            accounts_db.display().to_string(),
+        ),
+    ]);
     config::parse("", &env).unwrap()
 }
 
 /// With the fixture's key and cert the probe decrypts with openssl, so no test consults the keychain.
 fn config(fx: &Fixture) -> Config {
-    let mut c = config_at(&fx.mail_root);
+    let mut c = config_at(&fx.mail_root, &fx.accounts_db);
     if let Some(keys) = &fx.smime {
         c.smime.decryptor = DecryptorKind::Openssl;
         c.smime.key = Some(keys.key.clone());
@@ -37,7 +44,10 @@ fn missing_root_report(anon: bool) -> (tempfile::TempDir, Report) {
         anon,
         ..Options::default()
     };
-    let report = doctor::run(&config_at(&root), &opts);
+    let report = doctor::run(
+        &config_at(&root, &dir.path().join("Accounts4.sqlite")),
+        &opts,
+    );
     (dir, report)
 }
 
@@ -132,8 +142,9 @@ fn anon_errors_hide_the_mail_root() {
     let bare = dir.path().join("bare root");
     std::fs::create_dir_all(bare.join("V10")).unwrap();
     let dir_text = dir.path().display().to_string();
+    let no_accounts = dir.path().join("Accounts4.sqlite");
     for root in [&under_mail, &custom, &bare] {
-        let plain = doctor::run(&config_at(root), &Options::default());
+        let plain = doctor::run(&config_at(root, &no_accounts), &Options::default());
         let root_text = root.display().to_string();
         assert!(
             plain.errors.iter().any(|e| e.contains(&root_text)),
@@ -145,7 +156,7 @@ fn anon_errors_hide_the_mail_root() {
             anon: true,
             ..Options::default()
         };
-        let r = doctor::run(&config_at(root), &opts);
+        let r = doctor::run(&config_at(root, &no_accounts), &opts);
         assert!(
             r.errors.iter().any(|e| e.contains("<root>")),
             "{:?}",
@@ -317,6 +328,7 @@ fn cli(fx: &Fixture, mail_root: &Path) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_importin"))
         .args(["doctor", "--anon", "--json"])
         .env("IMPORTIN_MAIL_ROOT", mail_root)
+        .env("IMPORTIN_ACCOUNTS_DB", &fx.accounts_db)
         .env("IMPORTIN_CONFIG", &path)
         .output()
         .unwrap()
@@ -340,4 +352,46 @@ fn cli_prints_json_and_sets_the_exit_code() {
     assert_eq!(out.status.code(), Some(2));
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["full_disk_access"], "missing or denied");
+}
+
+#[test]
+fn accounts_carry_label_kind_and_uuid_unless_anon() {
+    let fx = fixture::build_with(
+        Epoch::Unix,
+        FixtureOptions {
+            url_form: UrlForm::MailboxUuid,
+            ..FixtureOptions::default()
+        },
+    );
+    let r = doctor::run(&config(&fx), &Options::default());
+    let a = &r.accounts[0];
+    assert_eq!(a.identifier, "paul@example.test");
+    assert_eq!(a.label.as_deref(), Some("Example"));
+    assert_eq!(a.kind.as_deref(), Some("IMAP"));
+    assert_eq!(a.uuid.as_deref(), Some(fixture::ACCOUNT_A));
+    let v: Value = serde_json::from_str(&doctor::render(&r, true)).unwrap();
+    assert_eq!(v["accounts"][1]["label"], "Google");
+    let text = doctor::render(&r, false);
+    let expected = format!(
+        "paul@example.test (Example; IMAP; {}; 4 mailboxes, ",
+        fixture::ACCOUNT_A
+    );
+    assert!(text.contains(&expected), "{text}");
+
+    let opts = Options {
+        anon: true,
+        ..Options::default()
+    };
+    let r = doctor::run(&config(&fx), &opts);
+    assert!(r.accounts.is_empty());
+    let json = serde_json::to_string(&r).unwrap();
+    for needle in [
+        fixture::ACCOUNT_A,
+        fixture::ACCOUNT_B,
+        "Example",
+        "Google",
+        "IMAP",
+    ] {
+        assert!(!json.contains(needle), "{needle:?} in {json}");
+    }
 }

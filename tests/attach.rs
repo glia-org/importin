@@ -15,10 +15,16 @@ const XLSX: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.
 const PPTX: &str = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
 
 fn config(fx: &Fixture) -> Config {
-    let env = HashMap::from([(
-        "IMPORTIN_MAIL_ROOT".to_string(),
-        fx.mail_root.display().to_string(),
-    )]);
+    let env = HashMap::from([
+        (
+            "IMPORTIN_MAIL_ROOT".to_string(),
+            fx.mail_root.display().to_string(),
+        ),
+        (
+            "IMPORTIN_ACCOUNTS_DB".to_string(),
+            fx.accounts_db.display().to_string(),
+        ),
+    ]);
     config::parse("", &env).unwrap()
 }
 

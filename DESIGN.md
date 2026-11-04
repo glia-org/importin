@@ -1,6 +1,7 @@
 # Importin: a read-only MCP server for Apple Mail — design
 
-Amended 2026-11-04 during implementation: see §8 (get_thread, search from, scope body needs a query).
+Amended 2026-11-04 during implementation: see §8 (get_thread, search from, scope body needs a query) and
+§4 (account labels from the Accounts database).
 
 Status: specification, written 2026-11-04 from the decisions in `docs/design-panel-2026-11-04.html` and the
 user's picks of the same day (all recommendations taken; runtime changed to Rust; name Importin). Nothing is
@@ -91,6 +92,14 @@ Data flow of a `get_email(id)`: `envelope` fetches the row and its recipients �
 - **Accounts** are derived from `mailboxes.url` (`imap://user%40host@host/INBOX` → user, host). No JXA.
   `config.exclude_accounts` holds glob patterns on `user@host`; excluded accounts are invisible to every
   tool. The mailbox display name is the URL path, percent-decoded.
+  *Amended 2026-11-04 (final fix wave):* the real store's URLs are `mailbox://<uuid>/<path>`, which carry
+  no address, so the uuid is looked up in `~/Library/Accounts/Accounts4.sqlite` (`ZACCOUNT.ZIDENTIFIER` →
+  `ZUSERNAME`, `ZACCOUNTDESCRIPTION`, `ZACCOUNTTYPE` → `ZACCOUNTTYPE.ZACCOUNTTYPEDESCRIPTION`), opened like
+  the Envelope Index (read-only, `mode=ro`, never `immutable=1`) once at startup; `IMPORTIN_ACCOUNTS_DB`
+  overrides the path. The account's identifier is the username when it holds an `@`, else the
+  description, else the uuid; an unreadable database leaves the uuids and never stops the server.
+  Exclusion globs are matched, lowercased, against user, host, `user@host`, uuid, username, description
+  and type, empty ones skipped (`["Google"]` excludes the Google account).
 
 ## 5. Files on disk
 
@@ -163,9 +172,9 @@ one-line message and, where useful, a `hint` (for example "narrow with after: or
 
 Args: `query` (string, may be empty when filters do the work, except with `scope: body`), `scope` (`all` |
 `subject` | `from` | `to` | `cc` | `participant` | `body`, default `all`), `after`, `before`, `mailbox`
-(substring of the display name), `account` (substring of `user@host`), `from` (substring of the sender's
-address or name; combines with any scope, `body` included), `unread` (bool), `flagged` (bool), `limit`
-(1–200, default 25), `offset`.
+(substring of the display name), `account` (substring of the account identifier, §4), `from`
+(substring of the sender's address or name; combines with any scope, `body` included), `unread` (bool),
+`flagged` (bool), `limit` (1–200, default 25), `offset`.
 
 Semantics: `query` is split on whitespace into terms; every term must match (AND) within the chosen
 scope. Header scopes match case-insensitively as substrings of `prefix || subject`, `address` or
@@ -214,7 +223,8 @@ accounts omitted.
 
 ### `list_accounts`
 
-Returns `[{identifier, user, host, scheme, mailboxes, messages}]`, excluded accounts omitted.
+Returns `[{identifier, label, kind, uuid, user, host, scheme, mailboxes, messages}]` (`uuid` null for an
+`imap://` URL, `label` and `kind` null without an Accounts database entry, §4), excluded accounts omitted.
 
 Dropped from 0.5.0: `get_email_links`, `get_email_attachment` (wrote files to disk), `get_attachment`, the
 `index://status` resource, every `filter=` preset (expressible with `unread`/`flagged`/`after`).
@@ -240,7 +250,7 @@ Dropped from 0.5.0: `get_email_links`, `get_email_attachment` (wrote files to di
 
 ```toml
 mail_root = "~/Library/Mail"          # IMPORTIN_MAIL_ROOT overrides (tests point it at a fixture tree)
-exclude_accounts = ["*@gmail.com"]     # glob on user@host
+exclude_accounts = ["*@gmail.com"]     # globs on address, account name, type or uuid (§4)
 body_scan_days = 90                    # default after: for scope: body
 body_scan_max = 500                    # candidate cap for scope: body
 

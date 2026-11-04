@@ -15,7 +15,7 @@ fn store_of(fx: &Fixture) -> Store {
 }
 
 fn url(fx: &Fixture, id: i64) -> String {
-    let env = envelope::open(&store_of(fx), &[]).unwrap();
+    let env = envelope::open(&store_of(fx), &[], &Default::default()).unwrap();
     env.get(id).unwrap().unwrap().mailbox_url
 }
 

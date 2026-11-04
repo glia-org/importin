@@ -11,6 +11,7 @@ use rusqlite::types::Value;
 use rusqlite::{Connection, OpenFlags, Row, params_from_iter};
 use serde::Serialize;
 
+use crate::accounts::AccountLabel;
 use crate::store::Store;
 
 const COCOA_OFFSET: i64 = 978_307_200;
@@ -156,6 +157,12 @@ pub struct MailboxInfo {
 #[derive(Debug, Clone, Serialize)]
 pub struct AccountInfo {
     pub identifier: String,
+    /// The account's name in the Accounts database (a `mailbox://` URL with a label only).
+    pub label: Option<String>,
+    /// The account type there, e.g. "IMAP" or "Google".
+    pub kind: Option<String>,
+    /// The account uuid of a `mailbox://` URL.
+    pub uuid: Option<String>,
     pub user: String,
     pub host: String,
     pub scheme: String,
@@ -192,6 +199,8 @@ pub struct Envelope {
     columns: HashSet<String>,
     /// `exclude_accounts`, lowercased; matched against the mailboxes on every query.
     patterns: Vec<glob::Pattern>,
+    /// Account labels by uppercased uuid, for `mailbox://<uuid>/…` URLs.
+    labels: HashMap<String, AccountLabel>,
     /// `SELECT … FROM messages … WHERE 1`; callers append the exclusion and `AND …`.
     select: String,
     recipients: Option<String>,
@@ -200,7 +209,12 @@ pub struct Envelope {
     _snapshot: Option<tempfile::TempDir>,
 }
 
-pub fn open(store: &Store, exclude_accounts: &[String]) -> Result<Envelope, EnvelopeError> {
+/// `labels` (from [`crate::accounts::load`], may be empty) name the accounts of `mailbox://` URLs.
+pub fn open(
+    store: &Store,
+    exclude_accounts: &[String],
+    labels: &HashMap<String, AccountLabel>,
+) -> Result<Envelope, EnvelopeError> {
     let patterns = exclude_accounts
         .iter()
         .map(|p| {
@@ -300,6 +314,7 @@ pub fn open(store: &Store, exclude_accounts: &[String]) -> Result<Envelope, Enve
         epoch_offset,
         columns,
         patterns,
+        labels: labels.clone(),
         select,
         recipients,
         mode,
@@ -308,7 +323,8 @@ pub fn open(store: &Store, exclude_accounts: &[String]) -> Result<Envelope, Enve
 }
 
 /// `file:<path>?mode=ro` only: no immutable flag, which would hide un-checkpointed WAL content.
-fn connect(path: &Path) -> rusqlite::Result<Connection> {
+/// Also opens the Accounts database.
+pub(crate) fn connect(path: &Path) -> rusqlite::Result<Connection> {
     // In a URI, `?` and `#` end the path and `%` starts an escape.
     let p = path
         .to_string_lossy()
@@ -403,14 +419,23 @@ fn mailbox_urls(conn: &Connection) -> rusqlite::Result<Vec<(i64, String)>> {
     .collect()
 }
 
-/// Any (lowercased) pattern matching the lowercased user, host, `user@host` or account uuid
-/// excludes the mailbox. Empty components are never matched, nor `user@host` unless both are set.
-fn is_excluded(u: &UrlParts, patterns: &[glob::Pattern]) -> bool {
+/// Any (lowercased) pattern matching the lowercased user, host, `user@host`, account uuid, or the
+/// label's username, description or kind excludes the mailbox. Empty components are never matched,
+/// nor `user@host` unless both are set.
+fn is_excluded(u: &UrlParts, label: Option<&AccountLabel>, patterns: &[glob::Pattern]) -> bool {
     let mut names = vec![u.user.clone(), u.host.clone()];
     if !u.user.is_empty() && !u.host.is_empty() {
         names.push(format!("{}@{}", u.user, u.host));
     }
     names.extend(u.account_uuid.clone());
+    if let Some(l) = label {
+        names.extend(
+            [&l.username, &l.description, &l.kind]
+                .into_iter()
+                .flatten()
+                .cloned(),
+        );
+    }
     names
         .iter()
         .filter(|n| !n.is_empty())
@@ -709,7 +734,7 @@ impl Envelope {
         let int =
             |i: usize| -> rusqlite::Result<i64> { Ok(r.get::<_, Option<i64>>(i)?.unwrap_or(0)) };
         let url = text(7)?;
-        let u = parse_mailbox_url(&url);
+        let (u, _) = self.parts(&url);
         Ok(MessageRow {
             id: r.get(0)?,
             date_received: self.date(r.get(1)?),
@@ -767,18 +792,40 @@ impl Envelope {
         DateTime::from_timestamp(secs as i64, nanos).map(|d| d.fixed_offset())
     }
 
+    /// [`parse_mailbox_url`] with the account's label, if a `mailbox://` URL has one; its identifier
+    /// is then the label's username if that holds an `@`, else its description, else the uuid.
+    fn parts(&self, url: &str) -> (UrlParts, Option<&AccountLabel>) {
+        let mut u = parse_mailbox_url(url);
+        let label = u
+            .account_uuid
+            .as_ref()
+            .and_then(|uuid| self.labels.get(&uuid.to_ascii_uppercase()));
+        let name = label.and_then(|l| {
+            l.username
+                .as_ref()
+                .filter(|n| n.contains('@'))
+                .or(l.description.as_ref())
+        });
+        if let Some(name) = name {
+            u.identifier = name.clone();
+        }
+        (u, label)
+    }
+
     /// The mailboxes as they are now, each judged against the exclude patterns. Read on every
     /// query, so a mailbox created after open is covered without a restart.
     fn scan(&self) -> rusqlite::Result<Vec<Mailbox>> {
         Ok(mailbox_urls(&self.conn)?
             .into_iter()
             .map(|(id, url)| {
-                let parts = parse_mailbox_url(&url);
-                let excluded = is_excluded(&parts, &self.patterns);
+                let (parts, label) = self.parts(&url);
+                let label = label.cloned();
+                let excluded = is_excluded(&parts, label.as_ref(), &self.patterns);
                 Mailbox {
                     id,
                     url,
                     parts,
+                    label,
                     excluded,
                 }
             })
@@ -846,22 +893,30 @@ struct Mailbox {
     id: i64,
     url: String,
     parts: UrlParts,
+    label: Option<AccountLabel>,
     excluded: bool,
 }
 
-/// Visible accounts in first-seen mailbox order, with their mailbox and non-deleted message counts.
+/// Visible accounts (one per identifier and uuid) in first-seen mailbox order, with their mailbox
+/// and non-deleted message counts.
 fn accounts_from(counts: &HashMap<i64, (i64, i64)>, boxes: Vec<Mailbox>) -> Vec<AccountInfo> {
     let mut out: Vec<AccountInfo> = Vec::new();
     for b in boxes.into_iter().filter(|b| !b.excluded) {
         let n = counts.get(&b.id).map_or(0, |c| c.0);
         let u = b.parts;
-        match out.iter_mut().find(|a| a.identifier == u.identifier) {
+        match out
+            .iter_mut()
+            .find(|a| a.identifier == u.identifier && a.uuid == u.account_uuid)
+        {
             Some(a) => {
                 a.mailboxes += 1;
                 a.messages += n;
             }
             None => out.push(AccountInfo {
                 identifier: u.identifier,
+                label: b.label.as_ref().and_then(|l| l.description.clone()),
+                kind: b.label.and_then(|l| l.kind),
+                uuid: u.account_uuid,
                 user: u.user,
                 host: u.host,
                 scheme: u.scheme,

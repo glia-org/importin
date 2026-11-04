@@ -59,7 +59,12 @@ index, so the RFC `Message-ID` is the durable key.
 - `imap://user%40host@host/INBOX`: the user is percent-decoded; the account is the user when it holds an
   `@`, else `user@host`.
 - `mailbox://<account-uuid>/INBOX`: the authority is the account's directory under `V<n>` and names the
-  account.
+  account. The uuid is the `ZIDENTIFIER` of a row of `ZACCOUNT` in the macOS Accounts database,
+  `~/Library/Accounts/Accounts4.sqlite`, which also holds `ZUSERNAME` (often the address),
+  `ZACCOUNTDESCRIPTION` (the name the user sees) and `ZACCOUNTTYPE` (→ `ZACCOUNTTYPE.Z_PK`, whose
+  `ZACCOUNTTYPEDESCRIPTION` is "IMAP", "Google", "iCloud", "On My Device", …). importin reads it once,
+  read-only, and names the account by the username when it holds an `@`, else by the description, else by
+  the uuid (also when the database cannot be read).
 
 The mailbox's display name is the URL path, percent-decoded (`Gesendete%20Objekte` → `Gesendete
 Objekte`). `doctor` reports the form found (`imap-user-host`, `mailbox-uuid` or `mixed`).

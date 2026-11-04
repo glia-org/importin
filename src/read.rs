@@ -1,12 +1,14 @@
 //! Compose one message (index row + emlx + MIME + S/MIME) and search, with a bounded body scan.
 //! Decrypted content lives only in the returned `Email`; nothing is cached or written.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde::Serialize;
 
+use crate::accounts;
 use crate::attach::{self, Extracted};
 use crate::config::Config;
 use crate::emlx::{self, Emlx, EmlxError, Flags};
@@ -43,9 +45,15 @@ pub enum OpenError {
     Envelope(#[from] EnvelopeError),
 }
 
+/// The account labels come from `config.accounts_db`; without them `mailbox://` accounts are named
+/// by their uuid.
 pub fn open(config: Config) -> Result<Context, OpenError> {
     let store = store::locate(&config.mail_root)?;
-    let env = envelope::open(&store, &config.exclude_accounts)?;
+    let labels = accounts::load(&config.accounts_db).unwrap_or_else(|e| {
+        crate::debug!("no account labels: {e}");
+        HashMap::new()
+    });
+    let env = envelope::open(&store, &config.exclude_accounts, &labels)?;
     Ok(Context {
         env: Mutex::new(env),
         locator: Locator::new(store),

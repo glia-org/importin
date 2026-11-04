@@ -19,7 +19,7 @@ struct Loaded {
 
 fn load(fx: &Fixture, id: i64) -> Loaded {
     let store = store::locate(&fx.mail_root).unwrap();
-    let url = envelope::open(&store, &[])
+    let url = envelope::open(&store, &[], &Default::default())
         .unwrap()
         .get(id)
         .unwrap()

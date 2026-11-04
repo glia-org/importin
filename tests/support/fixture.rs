@@ -13,6 +13,13 @@
 //! 5 `INBOX` (account B `excluded@gmail.example`, host `imap.gmail.example`, dir `ACCOUNT_B`).
 //! `total_count`/`unread_count` count non-deleted rows.
 //!
+//! Accounts database: `Fixture::accounts_db` = `<dir>/Accounts/Accounts4.sqlite`, Core Data shaped
+//! (`Z_PK`, `Z_ENT`, `Z_OPT` on both tables): `ZACCOUNT(ZIDENTIFIER, ZUSERNAME, ZACCOUNTDESCRIPTION,
+//! ZACCOUNTTYPE → ZACCOUNTTYPE.Z_PK)`, `ZACCOUNTTYPE(ZACCOUNTTYPEDESCRIPTION)`. Rows: ACCOUNT_A username
+//! `paul@example.test`, description "Example", type "IMAP"; ACCOUNT_B `excluded@gmail.example`,
+//! "Google", "Google". Nothing reads it unless a test points `IMPORTIN_ACCOUNTS_DB` (or
+//! `accounts::load`) at it.
+//!
 //! Dates: `base` = today 00:00 UTC; each message is some hours before it, so two builds on the same
 //! UTC day agree on every date. Index timestamps follow `Epoch`; the emlx `date-received` is always
 //! Unix seconds. `date_sent` = `date_received` − 120 s (also the `Date:` header). `messages.flags`
@@ -101,6 +108,7 @@ impl Default for Options {
 pub struct Fixture {
     pub dir: tempfile::TempDir,
     pub mail_root: PathBuf,
+    pub accounts_db: PathBuf,
     pub epoch: Epoch,
     pub ids: Ids,
     pub smime: Option<SmimeKeys>,
@@ -393,9 +401,12 @@ pub fn build_with(epoch: Epoch, opts: Options) -> Fixture {
 
     let index = v10.join("MailData").join("Envelope Index");
     write_index(&index, &msgs, &sizes, epoch, opts.url_form, base);
+    let accounts_db = dir.path().join("Accounts").join("Accounts4.sqlite");
+    write_accounts(&accounts_db);
 
     Fixture {
         mail_root,
+        accounts_db,
         epoch,
         ids: Ids {
             plain: 101,
@@ -684,6 +695,31 @@ fn write_index(path: &Path, msgs: &[Msg], sizes: &[i64], epoch: Epoch, form: Url
     }
     tx.commit().unwrap();
     conn.close().map_err(|(_, e)| e).unwrap();
+}
+
+/// The macOS Accounts database, reduced to the columns `accounts::load` reads plus Core Data's own.
+fn write_accounts(path: &Path) {
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let conn = Connection::open(path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE ZACCOUNTTYPE (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, Z_OPT INTEGER, \
+           ZACCOUNTTYPEDESCRIPTION VARCHAR);
+         CREATE TABLE ZACCOUNT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, Z_OPT INTEGER, \
+           ZACCOUNTTYPE INTEGER, ZIDENTIFIER VARCHAR, ZUSERNAME VARCHAR, ZACCOUNTDESCRIPTION VARCHAR);
+         INSERT INTO ZACCOUNTTYPE VALUES (1, 2, 1, 'IMAP'), (2, 2, 1, 'Google');",
+    )
+    .unwrap();
+    for (pk, kind, uuid, username, description) in [
+        (1, 1, ACCOUNT_A, "paul@example.test", "Example"),
+        (2, 2, ACCOUNT_B, "excluded@gmail.example", "Google"),
+    ] {
+        conn.execute(
+            "INSERT INTO ZACCOUNT (Z_PK, Z_ENT, Z_OPT, ZACCOUNTTYPE, ZIDENTIFIER, ZUSERNAME, \
+               ZACCOUNTDESCRIPTION) VALUES (?, 1, 1, ?, ?, ?, ?)",
+            params![pk, kind, uuid, username, description],
+        )
+        .unwrap();
+    }
 }
 
 fn url(mbx: &Mbx, form: UrlForm) -> String {

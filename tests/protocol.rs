@@ -65,6 +65,7 @@ impl Server {
 
         let mut child = Command::new(env!("CARGO_BIN_EXE_importin"))
             .env("IMPORTIN_MAIL_ROOT", &fx.mail_root)
+            .env("IMPORTIN_ACCOUNTS_DB", &fx.accounts_db)
             .env("IMPORTIN_CONFIG", &config)
             .env("TZ", TZ)
             .envs(env.iter().copied())

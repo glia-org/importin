@@ -22,7 +22,7 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 /// The raw RFC 822 bytes of fixture message `id`.
 fn load(fx: &Fixture, id: i64) -> Vec<u8> {
     let store = store::locate(&fx.mail_root).unwrap();
-    let url = envelope::open(&store, &[])
+    let url = envelope::open(&store, &[], &Default::default())
         .unwrap()
         .get(id)
         .unwrap()
