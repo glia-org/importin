@@ -188,6 +188,39 @@ fn opaque_signed_inner_is_decoded() {
 }
 
 #[test]
+fn decode_signed_ignores_a_broken_signature() {
+    let fx = fixture::build(Epoch::Unix);
+    let Some(keys) = &fx.smime else {
+        eprintln!("skipped: the fixture has no S/MIME keys (no openssl)");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("inner.eml"),
+        "Content-Type: text/plain\n\nthe signed sentence\n",
+    )
+    .unwrap();
+    let (key, cert) = (keys.key.display(), keys.cert.display());
+    openssl(
+        dir.path(),
+        &format!(
+            "cms -sign -nodetach -outform DER -signer {cert} -inkey {key} -in inner.eml -out signed.der"
+        ),
+    );
+    let mut der = fs::read(dir.path().join("signed.der")).unwrap();
+    let at = der
+        .windows(19)
+        .position(|w| w == b"the signed sentence")
+        .expect("content octets in the DER");
+    der[at] = b'T'; // the message digest no longer matches
+    let out = openssl_with(keys).decode_signed(&der).unwrap();
+    assert!(
+        String::from_utf8_lossy(&out).contains("The signed sentence"),
+        "{out:?}"
+    );
+}
+
+#[test]
 fn unsigned_inner_passes_through_and_auth_enveloped_is_tried() {
     let raw = b"From: a@example.test\nContent-Type: application/pkcs7-mime; smime-type=authEnveloped-data; name=\"smime.p7m\"\n\
 Content-Transfer-Encoding: base64\n\nMAMCAQA=\n";
@@ -200,6 +233,11 @@ Content-Transfer-Encoding: base64\n\nMAMCAQA=\n";
     assert!(!u.signed);
     assert_eq!(u.layers, ["enveloped"]);
     assert_eq!(u.inner, b"Content-Type: text/plain\n\nunsigned inside\n");
+    // Debug never shows the decrypted bytes.
+    assert_eq!(
+        format!("{u:?}"),
+        r#"Unwrapped { inner_len: 42, signed: false, layers: ["enveloped"] }"#
+    );
 }
 
 #[test]

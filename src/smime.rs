@@ -2,6 +2,7 @@
 //! and unwrap one signed layer. Signatures are not verified. DER goes to the decoder on stdin and
 //! the content comes back on stdout; nothing is written to disk.
 
+use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -83,7 +84,8 @@ impl Decryptor for OpensslCli {
     }
     fn decode_signed(&self, der: &[u8]) -> Result<Vec<u8>, DecryptError> {
         let mut cmd = Command::new(&self.bin);
-        cmd.args(["cms", "-verify", "-noverify", "-inform", "DER"]);
+        // -nosigs: content comes back even when the signature would not verify.
+        cmd.args(["cms", "-verify", "-noverify", "-nosigs", "-inform", "DER"]);
         run(cmd, der, self.timeout)
     }
     fn name(&self) -> &'static str {
@@ -109,13 +111,23 @@ pub fn from_config(cfg: &SmimeConfig) -> Box<dyn Decryptor> {
     }
 }
 
-#[derive(Debug)]
 pub struct Unwrapped {
     /// A MIME entity to parse with `mime::parse`.
     pub inner: Vec<u8>,
     pub signed: bool,
     /// The layers removed, outermost first: `["enveloped", "multipart/signed"]`.
     pub layers: Vec<&'static str>,
+}
+
+/// Never shows the decrypted bytes, so `{:?}` cannot leak them into a log.
+impl fmt::Debug for Unwrapped {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Unwrapped")
+            .field("inner_len", &self.inner.len())
+            .field("signed", &self.signed)
+            .field("layers", &self.layers)
+            .finish()
+    }
 }
 
 /// Decrypt an enveloped message and remove one signed layer (multipart/signed or opaque
