@@ -532,3 +532,60 @@ fn stray_stdout_print_goes_to_stderr() {
     let stderr = s.finish();
     assert!(stderr.lines().any(|l| l == "stray"), "stderr: {stderr:?}");
 }
+
+/// The DESIGN §2 budgets on a 2 000-message store. Run by `checks/budgets.sh` with `--release`;
+/// a debug build measures the wrong binary.
+#[test]
+#[ignore = "release budgets: run checks/budgets.sh"]
+fn budgets_release() {
+    let fx = fixture::build_with(
+        Epoch::Unix,
+        fixture::Options {
+            messages: 2000 - 42,
+            ..Default::default()
+        },
+    );
+    // The first exec of a fresh binary costs ~0.7 s before main on macOS; pay it once here.
+    Command::new(env!("CARGO_BIN_EXE_importin"))
+        .arg("--version")
+        .output()
+        .unwrap();
+
+    let start = Instant::now();
+    let mut s = Server::spawn(&fx);
+    let r = s.initialize();
+    let init = start.elapsed();
+    assert!(r["result"]["serverInfo"].is_object(), "{r}");
+
+    let start = Instant::now();
+    let hits = s.ok("search", json!({"query": "Filler", "scope": "subject"}));
+    let search = start.elapsed();
+    let ids = hit_ids(&hits, "hits");
+    assert_eq!(ids.len(), 25, "{hits}");
+
+    let start = Instant::now();
+    let e = s.ok("get_email", json!({"id": ids[0]}));
+    let get_email = start.elapsed();
+    assert!(
+        e["body"]
+            .as_str()
+            .unwrap()
+            .starts_with("Filler body number"),
+        "{e}"
+    );
+
+    let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+    let report = format!(
+        "budgets: initialize {:.1} ms (< 50), search {:.1} ms (< 50), get_email {:.1} ms (< 30)",
+        ms(init),
+        ms(search),
+        ms(get_email)
+    );
+    println!("{report}");
+    assert!(
+        init < Duration::from_millis(50)
+            && search < Duration::from_millis(50)
+            && get_email < Duration::from_millis(30),
+        "{report}"
+    );
+}
