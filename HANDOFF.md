@@ -165,8 +165,12 @@ Found while writing the docs:
    `~/.config/importin/config.toml` with `exclude_accounts` for the account that must stay invisible
    (patterns match address, account name, account type or uuid; `importin doctor` lists the
    identifiers). Without (b) every account is visible to the agent.
-2. Switch opencode: `~/mail/mail.json` `mail` command → `["/Users/paul/.cargo/bin/importin"]`, the `mail`
-   agent prompt gets the new scopes and loses the attachment-tool notes, `tools/mail.ts` retires; then the
-   yes/no/count smoke run through `opencode api`, and its numbers recorded here.
+2. Done 2026-11-04: opencode switched (`~/mail/mail.json` → `~/.cargo/bin/importin`, new `mail` agent
+   prompt from `docs/opencode/mail.md`, `tools/mail.ts` retired), `exclude_accounts` set to the one unnamed
+   IMAP account, keychain grant accepted (decrypt probe 50 ms). Live probe on the real store through the
+   stdio client, counts only: cc search 5 ms, get_email with To/Cc 1 ms, participant search 8 ms,
+   body scan 5 hits after 192 of 500 candidates in 91 ms, thread 1 ms. The opencode Qwen session
+   "importin smoke 2026-11-04" ran (13 k input / 459 output tokens); its transcript was not read by
+   Claude (classifier), the user checks it in the TUI.
 3. Before `cargo publish`: the release workflow runs on the first `v*` tag once the repo is on GitHub
    (`Cargo.toml` now carries `license`, `description`, `repository`, `keywords`, `categories`, `readme`).
