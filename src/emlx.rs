@@ -105,7 +105,8 @@ pub fn parse(bytes: &[u8]) -> Result<Emlx, EmlxError> {
 }
 
 /// True if the payload's last line is a closing boundary one dash short (`--token-`) and a plist
-/// follows directly, i.e. the count is off by one and the dash belongs to the message.
+/// follows directly. The dash is missing from the file itself (the count matches the bytes on disk);
+/// restoring it lets the MIME parser see the closing boundary.
 fn lost_closing_dash(raw: &[u8], trailer: &[u8]) -> bool {
     let line = raw.rsplit(|&b| b == b'\n').next().unwrap_or(raw);
     let plist_follows = trailer.starts_with(b"<?xml") || trailer.starts_with(b"<plist");

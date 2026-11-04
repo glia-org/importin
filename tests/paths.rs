@@ -244,68 +244,84 @@ fn falls_back_to_walk_when_formula_misses() {
     );
 }
 
-#[test]
-fn missing_file_is_none_and_the_miss_is_cached() {
-    let fx = fixture::build(Epoch::Unix);
+/// Caches the walk of INBOX through a miss for an absent ROWID, plants that ROWID's file in a wrong
+/// shard, checks the cached miss still answers `None` (no walk per miss), then touches `stamp_file`
+/// and checks the next lookup walks again and finds it.
+fn assert_stamp_change_rewalks(fx: &Fixture, stamp_file: &Path) {
     let id = fx.ids.plain;
-    let u = url(&fx, id);
-    let loc = Locator::new(store_of(&fx));
+    let u = url(fx, id);
+    let loc = Locator::new(store_of(fx));
     let at_formula = locate(&loc, id, &u).emlx;
     let data = at_formula.parent().unwrap().parent().unwrap().to_path_buf();
     assert!(data.ends_with("Data"));
 
     let absent = 999_999;
     assert!(loc.locate(absent, &u).unwrap().is_none());
-
-    // A file appearing in a wrong shard is not seen until the index changes: no re-walk per miss.
     let dir = data.join("7").join("Messages");
     fs::create_dir_all(&dir).unwrap();
-    fs::copy(&at_formula, dir.join(format!("{absent}.emlx"))).unwrap();
-    assert!(loc.locate(absent, &u).unwrap().is_none());
+    let planted = dir.join(format!("{absent}.emlx"));
+    fs::copy(&at_formula, &planted).unwrap();
+    assert!(
+        loc.locate(absent, &u).unwrap().is_none(),
+        "a cached miss must not walk again"
+    );
 
-    touch(&store_of(&fx).envelope_index);
+    touch(stamp_file);
     let l = locate(&loc, absent, &u);
     assert_eq!(l.by, Resolution::Walk);
-    assert_eq!(l.emlx, dir.join(format!("{absent}.emlx")));
+    assert_eq!(l.emlx, planted);
 }
 
 #[test]
 fn cache_invalidates_on_index_change() {
     let fx = fixture::build(Epoch::Unix);
-    let id = fx.ids.plain;
-    let u = url(&fx, id);
-    let s = store_of(&fx);
-    let loc = Locator::new(s.clone());
-    let first = move_to_shard(&locate(&loc, id, &u).emlx, "9");
-    assert_eq!(locate(&loc, id, &u).emlx, first);
-
-    // Moved again without an index change: the cached (stale) path still answers.
-    let second = move_to_shard(&first, "8");
-    assert_eq!(locate(&loc, id, &u).emlx, first);
-
-    touch(&s.envelope_index);
-    let l = locate(&loc, id, &u);
-    assert_eq!(l.by, Resolution::Walk);
-    assert_eq!(l.emlx, second);
+    assert_stamp_change_rewalks(&fx, &store_of(&fx).envelope_index);
 }
 
 #[test]
 fn cache_invalidates_on_wal_change() {
     let fx = fixture::build(Epoch::Unix);
-    let id = fx.ids.plain;
-    let u = url(&fx, id);
-    let s = store_of(&fx);
-    let mut wal = s.envelope_index.clone().into_os_string();
+    let mut wal = store_of(&fx).envelope_index.into_os_string();
     wal.push("-wal");
     let wal = PathBuf::from(wal);
     assert!(wal.is_file(), "fixture keeps its -wal");
-    let loc = Locator::new(s);
+    // A Mail write that sits only in the WAL changes the -wal mtime, not the main file's.
+    assert_stamp_change_rewalks(&fx, &wal);
+}
+
+#[test]
+fn cache_hit_with_missing_file_rewalks_once() {
+    let fx = fixture::build(Epoch::Unix);
+    let id = fx.ids.plain;
+    let u = url(&fx, id);
+    let loc = Locator::new(store_of(&fx));
     let first = move_to_shard(&locate(&loc, id, &u).emlx, "9");
     assert_eq!(locate(&loc, id, &u).emlx, first);
-    let second = move_to_shard(&first, "8");
-    assert_eq!(locate(&loc, id, &u).emlx, first);
 
-    // A Mail write that sits only in the WAL changes the -wal mtime, not the main file's.
-    touch(&wal);
-    assert_eq!(locate(&loc, id, &u).emlx, second);
+    // Moved again, no stamp change: the cached path is gone, so one walk finds the new one.
+    let second = move_to_shard(&first, "8");
+    let l = locate(&loc, id, &u);
+    assert_eq!(l.by, Resolution::Walk);
+    assert_eq!(l.emlx, second);
+
+    // Gone from the tree: the cached path is missing, the one walk finds nothing, and its map
+    // replaces the old entry...
+    let parked = fx.dir.path().join("parked.emlx");
+    fs::rename(&second, &parked).unwrap();
+    assert!(loc.locate(id, &u).unwrap().is_none());
+    // ...so a file appearing now is a cached miss, not another walk, until the stamp changes.
+    let dir = second
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("7/Messages");
+    fs::create_dir_all(&dir).unwrap();
+    let third = dir.join(format!("{id}.emlx"));
+    fs::rename(&parked, &third).unwrap();
+    assert!(loc.locate(id, &u).unwrap().is_none());
+    touch(&store_of(&fx).envelope_index);
+    assert_eq!(locate(&loc, id, &u).emlx, third);
 }

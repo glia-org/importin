@@ -190,7 +190,8 @@ impl Locator {
         self.cache.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// `Ok(None)` if neither the formula nor the (cached) walk of the mailbox finds the file.
+    /// `Ok(None)` if neither the formula nor the (cached) walk of the mailbox finds the file. A cached
+    /// path that no longer exists costs one fresh walk of the mailbox.
     pub fn locate(&self, rowid: i64, mailbox_url: &str) -> Result<Option<Located>, PathError> {
         let dirs = mailbox_dir_candidates(&self.store, mailbox_url);
         let messages = shard(rowid).join("Messages");
@@ -211,8 +212,14 @@ impl Locator {
         if let Some(c) = self.cache().get(mailbox_url)
             && c.stamp == now
         {
-            let hit = c.files.get(&rowid).cloned();
-            return Ok(hit.map(|p| located(p, rowid, Resolution::Walk)));
+            match c.files.get(&rowid) {
+                None => return Ok(None),
+                Some(p) if p.is_file() => {
+                    return Ok(Some(located(p.clone(), rowid, Resolution::Walk)));
+                }
+                // Moved since the walk: walk once more; the new map replaces this entry.
+                Some(_) => {}
+            }
         }
         let files = walk(&dirs)?;
         let hit = files.get(&rowid).cloned();
