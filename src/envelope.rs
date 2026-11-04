@@ -229,9 +229,9 @@ pub fn open(
     let (conn, mode, snapshot_dir) = match connect(index) {
         Ok(conn) => (conn, OpenMode::ReadOnly, None),
         Err(e) => {
-            eprintln!("importin: read-only open failed ({e}); reading a snapshot copy");
+            crate::warn!("read-only open failed ({e}); reading a snapshot copy");
             let (dir, copy) = snapshot(index).map_err(|io| {
-                eprintln!("importin: snapshot copy failed: {io}");
+                crate::warn!("snapshot copy failed: {io}");
                 EnvelopeError::Open(e)
             })?;
             let conn = connect(&copy).map_err(EnvelopeError::Open)?;
@@ -362,7 +362,7 @@ fn snapshot(index: &Path) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
             if suffix != "-shm" {
                 return Err(e);
             }
-            eprintln!("importin: snapshot without -shm: {e}");
+            crate::warn!("snapshot without -shm: {e}");
         }
     }
     Ok((dir, copy))

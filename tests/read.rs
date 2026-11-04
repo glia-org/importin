@@ -241,6 +241,25 @@ fn search_body_default_window_90_days() {
 }
 
 #[test]
+fn search_body_window_ends_at_before() {
+    let fx = fixture::build(Epoch::Unix);
+    let c = ctx(&fx);
+    // `old_unique` is 200 days old: inside [before − 90 days, before), outside the last 90 days.
+    let mut f = filter(Scope::Body, &["zymurgy"]);
+    f.before = Some(Utc::now() - Duration::days(190));
+    let r = read::search(&c, &f).unwrap();
+    assert_eq!(ids(&r), [fx.ids.old_unique]);
+    assert_eq!(r.candidates_total, Some(1));
+    // An explicit `after` still wins.
+    f.after = Some(Utc::now() - Duration::days(195));
+    assert!(read::search(&c, &f).unwrap().hits.is_empty());
+    // A `before` at the start of time scans from there, without overflow.
+    f.after = None;
+    f.before = Some(chrono::DateTime::<Utc>::MIN_UTC);
+    assert!(read::search(&c, &f).unwrap().hits.is_empty());
+}
+
+#[test]
 fn search_body_cap_marks_truncated() {
     let fx = fixture::build(Epoch::Unix);
     let f = filter(Scope::Body, &["no such phrase anywhere"]);

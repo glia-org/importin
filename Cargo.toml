@@ -2,6 +2,12 @@
 name = "importin"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
+description = "Read-only MCP server for Apple Mail: full envelopes and S/MIME"
+repository = "https://github.com/glia-org/importin"
+keywords = ["mcp", "apple-mail", "email", "smime", "macos"]
+categories = ["email", "command-line-utilities"]
+readme = "README.md"
 
 [dependencies]
 anyhow = "1.0.104"

@@ -44,7 +44,8 @@ struct SearchArgs {
     query: Option<String>,
     /// One of all (default), subject, from, to, cc, participant, body. all = subject, sender,
     /// recipients and Mail's summary; participant = from, to, cc and bcc. body reads message files
-    /// received since `after` (default 90 days ago); encrypted bodies are never searched.
+    /// received since `after`, by default the configured window (body_scan_days, default 90 days)
+    /// before `before` or now; encrypted bodies are never searched.
     scope: Option<String>,
     /// Received at or after: RFC 3339 (2025-01-31T09:00:00+01:00) or YYYY-MM-DD (local midnight).
     after: Option<String>,
@@ -418,18 +419,20 @@ fn date<Tz: TimeZone>(field: &str, s: &str, tz: &Tz) -> Result<DateTime<Utc>, St
         return Ok(t.with_timezone(&Utc));
     }
     NaiveDate::parse_from_str(s, "%Y-%m-%d")
-        .map(|d| {
+        .ok()
+        .and_then(|d| {
             let midnight = d.and_time(NaiveTime::MIN);
-            match tz.from_local_datetime(&midnight).earliest() {
-                Some(t) => t.with_timezone(&Utc),
-                None => {
-                    let day_before = midnight.and_utc() - Duration::days(1);
-                    let offset = tz.offset_from_utc_datetime(&day_before.naive_utc()).fix();
-                    (midnight - Duration::seconds(offset.local_minus_utc().into())).and_utc()
-                }
+            if let Some(t) = tz.from_local_datetime(&midnight).earliest() {
+                return Some(t.with_timezone(&Utc));
             }
+            // A gap, or an instant outside chrono's range (checked: no overflow panics).
+            let day_before = midnight.and_utc().checked_sub_signed(Duration::days(1))?;
+            let offset = tz.offset_from_utc_datetime(&day_before.naive_utc()).fix();
+            let utc =
+                midnight.checked_sub_signed(Duration::seconds(offset.local_minus_utc().into()))?;
+            Some(utc.and_utc())
         })
-        .map_err(|_| {
+        .ok_or_else(|| {
             format!("{field} must be RFC 3339 (2025-01-31T09:00:00+01:00) or YYYY-MM-DD; got {s:?}")
         })
 }
@@ -462,5 +465,21 @@ mod tests {
         let t = date("after", "2026-01-01T09:00:00+01:00", &berlin_winter).unwrap();
         assert_eq!(t.to_rfc3339(), "2026-01-01T08:00:00+00:00");
         assert!(date("after", "2026-02-30", &berlin_winter).is_err());
+    }
+
+    #[test]
+    fn earliest_date_east_of_utc_is_an_error_not_a_panic() {
+        // Local midnight of NaiveDate::MIN lies before the first representable UTC instant.
+        let east = FixedOffset::east_opt(3600).unwrap();
+        let e = date("after", "-262143-01-01", &east).unwrap_err();
+        assert!(e.starts_with("after must be RFC 3339"), "{e}");
+        assert!(
+            date(
+                "before",
+                "-262143-01-01",
+                &FixedOffset::west_opt(3600).unwrap()
+            )
+            .is_ok()
+        );
     }
 }

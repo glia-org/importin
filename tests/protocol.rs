@@ -241,8 +241,10 @@ fn tools_list_has_six_read_only_tools() {
     ] {
         assert!(props.get(p).is_some(), "search lacks {p}: {props}");
     }
+    let scope = props["scope"]["description"].as_str();
     assert!(
-        props["scope"]["description"].as_str().is_some(),
+        scope
+            .is_some_and(|d| d.contains("the configured window (body_scan_days, default 90 days)")),
         "field docs become descriptions: {props}"
     );
 }
@@ -296,6 +298,37 @@ fn search_filters_from_dates_and_body() {
     );
     assert_eq!(hit_ids(&r, "hits").len(), 2);
     assert_eq!(r["truncated"], json!(true));
+}
+
+#[test]
+fn search_mailbox_unread_flagged_and_offset() {
+    let fx = fixture::build(Epoch::Unix);
+    let mut s = Server::start(&fx);
+
+    let r = s.ok("search", json!({"mailbox": "archive"}));
+    assert_eq!(hit_ids(&r, "hits"), [123, 124, 125, 126]);
+
+    // Account B (129–131 unread, 117) is excluded; 110 exists only with openssl.
+    let r = s.ok("search", json!({"unread": true, "limit": 200}));
+    let mut unread = hit_ids(&r, "hits");
+    unread.sort();
+    let mut expected = vec![
+        102, 105, 106, 107, 108, 109, 114, 115, 116, 120, 121, 122, 132, 133, 2001, 2002, 2004,
+        12_345,
+    ];
+    expected.extend(fx.ids.encrypted);
+    expected.sort();
+    assert_eq!(unread, expected);
+
+    let r = s.ok("search", json!({"flagged": true}));
+    assert_eq!(hit_ids(&r, "hits"), [132, 134]);
+
+    let r = s.ok(
+        "search",
+        json!({"query": "kickoff", "scope": "subject", "offset": 1}),
+    );
+    let [first, second, _] = fx.ids.thread;
+    assert_eq!(hit_ids(&r, "hits"), [second, first]);
 }
 
 fn received(hit: &Value) -> DateTime<Utc> {
@@ -534,11 +567,53 @@ fn stray_stdout_print_goes_to_stderr() {
     assert!(stderr.lines().any(|l| l == "stray"), "stderr: {stderr:?}");
 }
 
+#[test]
+fn unknown_schema_prints_the_tables_to_stderr() {
+    let fx = fixture::build(Epoch::Unix);
+    // The fixture's own synthetic index, never Mail's.
+    rusqlite::Connection::open(fx.mail_root.join("V10/MailData/Envelope Index"))
+        .unwrap()
+        .execute_batch("ALTER TABLE mailboxes RENAME COLUMN url TO link;")
+        .unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_importin"))
+        .arg("serve")
+        .env("IMPORTIN_MAIL_ROOT", &fx.mail_root)
+        .env("IMPORTIN_ACCOUNTS_DB", &fx.accounts_db)
+        .env("IMPORTIN_CONFIG", fx.dir.path().join("no-config.toml"))
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    assert!(out.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let mut lines = stderr.lines();
+    assert_eq!(
+        lines.next(),
+        Some("importin: unknown Envelope Index schema: missing mailboxes.url"),
+        "{stderr}"
+    );
+    assert!(
+        lines
+            .next()
+            .is_some_and(|l| l.starts_with("CREATE TABLE addresses")),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("CREATE TABLE mailboxes (ROWID INTEGER PRIMARY KEY, link TEXT"),
+        "{stderr}"
+    );
+}
+
 /// The DESIGN §2 budgets on a 2 000-message store. Run by `checks/budgets.sh` with `--release`;
 /// a debug build measures the wrong binary.
 #[test]
 #[ignore = "release budgets: run checks/budgets.sh"]
 fn budgets_release() {
+    // Checked at run time: a const assert would stop the debug build of this file from compiling.
+    #[allow(clippy::assertions_on_constants)]
+    {
+        assert!(!cfg!(debug_assertions), "run checks/budgets.sh");
+    }
     let fx = fixture::build_with(
         Epoch::Unix,
         fixture::Options {

@@ -81,12 +81,18 @@ fn report_on_fixture_is_ok() {
     let f = r.flag_check.as_ref().unwrap();
     assert_eq!(f.sampled, 20);
     assert_eq!((f.encrypted_flag_and_type_agree, f.disagree), (20, 0));
+    assert_eq!((f.flag_set_not_enveloped, f.enveloped_flag_clear), (0, 0));
 
     let p = r.decrypt_probe.as_ref().unwrap();
     match fx.ids.encrypted {
         Some(_) => {
             assert_eq!(p.method, "openssl");
-            assert!(p.tried && p.ok, "probe failed: {:?} {}", p.status, p.stderr);
+            assert!(
+                p.tried && p.ok,
+                "probe failed: {:?} {:?}",
+                p.status,
+                p.stderr
+            );
             assert_eq!(p.status, Some(0));
         }
         None => assert!(!p.tried),
@@ -232,27 +238,80 @@ fn anon_scrub_hides_paths_urls_and_addresses() {
 }
 
 #[test]
-fn anon_probe_stderr_is_one_scrubbed_line() {
+fn anon_probe_drops_stderr() {
     let fx = fixture::build(Epoch::Unix);
     let Some(keys) = &fx.smime else {
+        eprintln!("skipped: no openssl, no encrypted message");
         return;
     };
     // A certificate is no private key: openssl fails, naming the file.
     let mut c = config(&fx);
     c.smime.key = Some(keys.cert.clone());
+    let p = doctor::run(&c, &Options::default()).decrypt_probe.unwrap();
+    assert!(p.tried && !p.ok);
+    assert!(p.stderr.as_deref().is_some_and(|e| !e.is_empty()), "{p:?}");
+
     let opts = Options {
         anon: true,
         ..Options::default()
     };
-    let p = doctor::run(&c, &opts).decrypt_probe.unwrap();
-    assert!(p.tried && !p.ok);
-    assert!(!p.stderr.contains('\n'), "{}", p.stderr);
-    let dir_text = fx.dir.path().display().to_string();
-    assert!(
-        !p.stderr.contains(&dir_text) && !p.stderr.contains("cert.pem"),
-        "{}",
-        p.stderr
+    let r = doctor::run(&c, &opts);
+    let p = r.decrypt_probe.as_ref().unwrap();
+    assert!(p.tried && !p.ok && p.status.is_some(), "{p:?}");
+    assert_eq!((p.method, p.stderr.as_deref()), ("openssl", None));
+    let v: Value = serde_json::from_str(&doctor::render(&r, true)).unwrap();
+    let probe = v["decrypt_probe"].as_object().unwrap();
+    let mut keys: Vec<&str> = probe.keys().map(String::as_str).collect();
+    keys.sort();
+    assert_eq!(keys, ["method", "ms", "ok", "status", "tried"]);
+    let text = doctor::render(&r, false);
+    let line = text.lines().find(|l| l.contains("decrypt probe")).unwrap();
+    assert!(line.starts_with("FAIL") && line.ends_with(" ms"), "{line}");
+}
+
+/// Rewrites the emlx plist `flags` of a message of the synthetic store (never Mail's).
+fn rewrite_emlx_flags(fx: &Fixture, id: i64, f: impl Fn(u64) -> u64) {
+    let store = importin::store::locate(&fx.mail_root).unwrap();
+    let env = importin::envelope::open(&store, &[], &Default::default()).unwrap();
+    let url = env.get(id).unwrap().unwrap().mailbox_url;
+    let located = importin::paths::Locator::new(store)
+        .locate(id, &url)
+        .unwrap();
+    let path = located.unwrap().emlx;
+    let text = std::fs::read_to_string(&path).unwrap();
+    let key = text.rfind("<key>flags</key>").unwrap();
+    let start = key + text[key..].find("<integer>").unwrap() + "<integer>".len();
+    let end = start + text[start..].find("</integer>").unwrap();
+    let flags = f(text[start..end].parse().unwrap());
+    std::fs::write(&path, format!("{}{flags}{}", &text[..start], &text[end..])).unwrap();
+}
+
+#[test]
+fn flag_check_counts_each_kind_of_disagreement() {
+    let fx = fixture::build(Epoch::Unix);
+    rewrite_emlx_flags(&fx, fx.ids.plain, |f| f | 8);
+    let clear = match fx.ids.encrypted {
+        Some(id) => {
+            rewrite_emlx_flags(&fx, id, |f| f & !8);
+            1
+        }
+        None => 0,
+    };
+    let r = doctor::run(&config(&fx), &Options::default());
+    let f = r.flag_check.as_ref().unwrap();
+    assert_eq!(
+        (f.flag_set_not_enveloped, f.enveloped_flag_clear),
+        (1, clear)
     );
+    assert_eq!(f.disagree, 1 + clear);
+    assert_eq!(f.encrypted_flag_and_type_agree, 20 - 1 - clear);
+    let text = doctor::render(&r, false);
+    let expected = format!(
+        "FAIL flag check: 20 sampled: {} agree, {} disagree, 0 unreadable",
+        19 - clear,
+        1 + clear
+    );
+    assert!(text.lines().any(|l| l == expected), "{text}");
 }
 
 #[test]
@@ -394,4 +453,27 @@ fn accounts_carry_label_kind_and_uuid_unless_anon() {
     ] {
         assert!(!json.contains(needle), "{needle:?} in {json}");
     }
+}
+
+#[test]
+fn cli_prints_an_unknown_schema_to_stderr_only() {
+    let fx = fixture::build(Epoch::Unix);
+    // The fixture's own synthetic index, never Mail's.
+    rusqlite::Connection::open(fx.mail_root.join("V10/MailData/Envelope Index"))
+        .unwrap()
+        .execute_batch("ALTER TABLE mailboxes RENAME COLUMN url TO link;")
+        .unwrap();
+    let out = cli(&fx, &fx.mail_root);
+    assert_eq!(out.status.code(), Some(2));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(
+        v["errors"][0],
+        "open: unknown Envelope Index schema: missing mailboxes.url"
+    );
+    assert!(!String::from_utf8_lossy(&out.stdout).contains("CREATE TABLE"));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("CREATE TABLE mailboxes (ROWID INTEGER PRIMARY KEY, link TEXT"),
+        "{stderr}"
+    );
 }

@@ -52,8 +52,8 @@ granted?)" on stderr, and `importin doctor` shows `FAIL full disk access`.
 The header scopes query the Envelope Index: case-insensitive substrings (ASCII letters only), `all` =
 subject, sender, every recipient and Mail's summary, `participant` = sender, To, Cc and Bcc. `scope: body`
 reads message files instead and needs a query: the candidates are the newest `body_scan_max` rows that
-pass the other filters, received since `after` (default `body_scan_days` ago); encrypted bodies are never
-searched; the reply adds `scanned` and `candidates_total`, and `truncated` with a hint to narrow when the
+pass the other filters, received since `after` (default `body_scan_days` before `before`, or before
+now); encrypted bodies are never searched; the reply adds `scanned` and `candidates_total`, and `truncated` with a hint to narrow when the
 scan stopped at `limit` hits or the candidate cap was reached. Ids are only good within a session (Mail
 renumbers rows when it rebuilds its index); `message_id` is durable. Deleted messages are left out of
 searches, threads and counts; excluded accounts are invisible to every tool.
@@ -105,7 +105,9 @@ flag bit against the content type on the same sample, the number of S/MIME ident
 decrypt probe on the newest encrypted message, and three timings. It exits 0 when Full Disk Access is
 granted and the schema resolved, else 2. The report never holds message content or subjects; `--anon`
 also drops the account identifiers, exclusion patterns and mail root, replaces paths, URLs and addresses
-in error text with `<path>`, `<url>` and `<addr>`, and keeps only the first line of the probe's stderr.
+in error text with `<path>`, `<url>` and `<addr>`, and drops the probe's stderr (its exit status stays).
+When the schema does not resolve, the `CREATE TABLE` statements of the index go to stderr, never into the
+report.
 
 ## S/MIME
 

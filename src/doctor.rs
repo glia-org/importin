@@ -14,11 +14,11 @@ use serde::Serialize;
 use crate::config::{Config, DecryptorKind};
 use crate::emlx::{self, Flags};
 use crate::envelope::{
-    AccountInfo, Counts, Filter, MessageRow, OpenMode, Scope, parse_mailbox_url,
+    AccountInfo, Counts, EnvelopeError, Filter, MessageRow, OpenMode, Scope, parse_mailbox_url,
 };
 use crate::mime;
 use crate::paths::Resolution;
-use crate::read::{self, Context, ReadError};
+use crate::read::{self, Context, OpenError, ReadError};
 use crate::smime::{self, DecryptError, SecurityCms};
 use crate::store::{self, StoreError};
 
@@ -46,11 +46,16 @@ pub struct PathSample {
 }
 
 /// The emlx flag bit 3 against the content type, on the path sample; files that cannot be read or
-/// parsed count in neither column.
+/// parsed count in no column.
 #[derive(Debug, Serialize)]
 pub struct FlagCheck {
     pub sampled: usize,
     pub encrypted_flag_and_type_agree: usize,
+    /// Bit 3 set, the content not enveloped.
+    pub flag_set_not_enveloped: usize,
+    /// Enveloped content, bit 3 clear.
+    pub enveloped_flag_clear: usize,
+    /// `flag_set_not_enveloped + enveloped_flag_clear`.
     pub disagree: usize,
 }
 
@@ -62,7 +67,9 @@ pub struct DecryptProbe {
     pub tried: bool,
     pub ok: bool,
     pub status: Option<i32>,
-    pub stderr: String,
+    /// Absent under `--anon`: it may name a certificate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stderr: Option<String>,
     pub ms: u128,
 }
 
@@ -102,6 +109,9 @@ pub struct Report {
     pub decrypt_probe: Option<DecryptProbe>,
     pub timings_ms: Timings,
     pub errors: Vec<String>,
+    /// The `CREATE TABLE` statements when the schema did not resolve: for stderr, not the report.
+    #[serde(skip)]
+    pub schema_dump: Option<String>,
 }
 
 pub struct Options {
@@ -143,6 +153,7 @@ pub fn run(config: &Config, opts: &Options) -> Report {
         decrypt_probe: None,
         timings_ms: Timings::default(),
         errors: Vec::new(),
+        schema_dump: None,
     };
     check_store(config, opts.sample, &mut r);
     if opts.anon {
@@ -188,8 +199,15 @@ fn check_store(config: &Config, sample: usize, r: &mut Report) {
         }
     }
     let start = Instant::now();
-    let Some(ctx) = note(&mut r.errors, "open", read::open(config.clone())) else {
-        return;
+    let ctx = match read::open(config.clone()) {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            if let OpenError::Envelope(EnvelopeError::Schema { dump, .. }) = &e {
+                r.schema_dump = Some(dump.clone());
+            }
+            r.errors.push(format!("open: {e}"));
+            return;
+        }
     };
     r.timings_ms.open = Some(start.elapsed().as_millis());
     check_index(&ctx, sample, r);
@@ -299,6 +317,8 @@ fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck, O
     let mut flags = FlagCheck {
         sampled: rows.len(),
         encrypted_flag_and_type_agree: 0,
+        flag_set_not_enveloped: 0,
+        enveloped_flag_clear: 0,
         disagree: 0,
     };
     let mut plain = None;
@@ -317,15 +337,16 @@ fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck, O
         let Ok(parsed) = mime::parse(&file.raw) else {
             continue;
         };
-        if file.flags.encrypted() == parsed.is_enveloped() {
-            flags.encrypted_flag_and_type_agree += 1;
-        } else {
-            flags.disagree += 1;
+        match (file.flags.encrypted(), parsed.is_enveloped()) {
+            (true, false) => flags.flag_set_not_enveloped += 1,
+            (false, true) => flags.enveloped_flag_clear += 1,
+            _ => flags.encrypted_flag_and_type_agree += 1,
         }
         if plain.is_none() && !Flags(row.flags as u64).encrypted() && !parsed.is_enveloped() {
             plain = Some(row.id);
         }
     }
+    flags.disagree = flags.flag_set_not_enveloped + flags.enveloped_flag_clear;
     (paths, flags, plain)
 }
 
@@ -352,7 +373,7 @@ fn decrypt_probe(
         tried: false,
         ok: false,
         status: None,
-        stderr: String::new(),
+        stderr: Some(String::new()),
         ms: 0,
     };
     let Some(row) = row else {
@@ -377,9 +398,9 @@ fn decrypt_probe(
         }
         Err(DecryptError::Failed { status, stderr }) => {
             probe.status = Some(status);
-            probe.stderr = stderr;
+            probe.stderr = Some(stderr);
         }
-        Err(e) => probe.stderr = e.to_string(),
+        Err(e) => probe.stderr = Some(e.to_string()),
     }
     probe
 }
@@ -423,9 +444,9 @@ fn anonymise(r: &mut Report) {
     for e in &mut r.errors {
         *e = scrub(e, &root);
     }
-    // The status carries the signal; later lines may name certificates.
+    // The status carries the signal; the text may name a certificate.
     if let Some(p) = &mut r.decrypt_probe {
-        p.stderr = scrub(p.stderr.lines().next().unwrap_or_default(), &root);
+        p.stderr = None;
     }
 }
 
@@ -634,11 +655,11 @@ pub fn render(r: &Report, json: bool) -> String {
             let status = p
                 .status
                 .map_or("no exit status".into(), |s| format!("exit {s}"));
-            line(
-                "FAIL",
-                &format!("decrypt probe ({})", p.method),
-                format!("{status} after {} ms: {}", p.ms, p.stderr),
-            );
+            let mut v = format!("{status} after {} ms", p.ms);
+            if let Some(stderr) = &p.stderr {
+                v += &format!(": {stderr}");
+            }
+            line("FAIL", &format!("decrypt probe ({})", p.method), v);
         }
     }
     let t = &r.timings_ms;

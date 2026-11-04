@@ -276,8 +276,9 @@ pub fn attachment_text(
     }
 }
 
-/// A message's index row and emlx file. `get_email` and `attachment_text` both load through
-/// `load` and `unwrap_outer`, so they find, read and unwrap a message the same way.
+/// A message's index row and emlx file. `get_email`, `attachment_text` and the body scan all load
+/// through `load`, so they find and read a message the same way; the first two also unwrap it
+/// through `unwrap_outer`.
 struct Loaded {
     row: MessageRow,
     file: Emlx,
@@ -286,13 +287,18 @@ struct Loaded {
 
 fn load(ctx: &Context, id: i64) -> Result<Loaded, ReadError> {
     let row = ctx.envelope().get(id)?.ok_or(ReadError::NotFound(id))?;
-    let located =
-        ctx.locator
-            .locate(id, &row.mailbox_url)?
-            .ok_or_else(|| ReadError::FileMissing {
-                id,
-                mailbox: row.mailbox.clone(),
-            })?;
+    load_row(ctx, row)
+}
+
+/// [`load`] for a row already fetched (the body scan's candidates).
+fn load_row(ctx: &Context, row: MessageRow) -> Result<Loaded, ReadError> {
+    let located = ctx
+        .locator
+        .locate(row.id, &row.mailbox_url)?
+        .ok_or_else(|| ReadError::FileMissing {
+            id: row.id,
+            mailbox: row.mailbox.clone(),
+        })?;
     let file = emlx::read(&located.emlx)?;
     Ok(Loaded {
         row,
@@ -350,8 +356,9 @@ fn extract_one(
 }
 
 /// Header scopes query the index. `Scope::Body` takes up to `body_scan_max` candidates from the
-/// index (newest first, `after` defaulting to `body_scan_days` ago) and searches their bodies for
-/// every term, case-insensitively; enveloped messages are not decrypted and never match.
+/// index (newest first, `after` defaulting to `body_scan_days` before `before`, or before now) and
+/// searches their bodies for every term, case-insensitively; enveloped messages are not decrypted
+/// and never match.
 pub fn search(ctx: &Context, f: &Filter) -> Result<SearchResult, ReadError> {
     if f.scope != Scope::Body {
         let hits: Vec<SearchHit> = ctx.envelope().search(f)?.into_iter().map(hit).collect();
@@ -366,9 +373,11 @@ pub fn search(ctx: &Context, f: &Filter) -> Result<SearchResult, ReadError> {
     }
 
     let max = ctx.config.body_scan_max;
-    let after = f
-        .after
-        .unwrap_or_else(|| Utc::now() - Duration::days(i64::from(ctx.config.body_scan_days)));
+    let after = f.after.unwrap_or_else(|| {
+        let end = f.before.unwrap_or_else(Utc::now);
+        end.checked_sub_signed(Duration::days(i64::from(ctx.config.body_scan_days)))
+            .unwrap_or(DateTime::<Utc>::MIN_UTC)
+    });
     let candidates = ctx.envelope().search(&Filter {
         scope: Scope::Body,
         after: Some(after),
@@ -420,16 +429,9 @@ pub fn search(ctx: &Context, f: &Filter) -> Result<SearchResult, ReadError> {
     })
 }
 
-/// The full text body; `None` for an enveloped message.
+/// The full text body; `None` for an enveloped message, which is not decrypted.
 fn body_text(ctx: &Context, row: &MessageRow) -> Result<Option<String>, ReadError> {
-    let located = ctx
-        .locator
-        .locate(row.id, &row.mailbox_url)?
-        .ok_or_else(|| ReadError::FileMissing {
-            id: row.id,
-            mailbox: row.mailbox.clone(),
-        })?;
-    let file = emlx::read(&located.emlx)?;
+    let Loaded { file, .. } = load_row(ctx, row.clone())?;
     let parsed = mime::parse(&file.raw)?;
     if parsed.is_enveloped() {
         return Ok(None);
@@ -463,5 +465,19 @@ pub fn hit(row: MessageRow) -> SearchHit {
 }
 
 fn is_pkcs7_mime(mime: &str) -> bool {
-    mime == "application/pkcs7-mime" || mime == "application/x-pkcs7-mime"
+    mime.eq_ignore_ascii_case("application/pkcs7-mime")
+        || mime.eq_ignore_ascii_case("application/x-pkcs7-mime")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pkcs7_mime_types_match_in_any_case() {
+        assert!(is_pkcs7_mime("application/pkcs7-mime"));
+        assert!(is_pkcs7_mime("Application/PKCS7-MIME"));
+        assert!(is_pkcs7_mime("application/X-PKCS7-Mime"));
+        assert!(!is_pkcs7_mime("application/pkcs7-signature"));
+    }
 }

@@ -184,7 +184,8 @@ descending (relevance ranking is out of scope; dates are what the agent prompt a
 
 `scope: body` needs a non-empty `query`; without one the call is a tool error ("scope body needs a query;
 use another scope for header-only filters"). It runs the bounded scan: candidates are the header-filtered
-rows (`after` defaults to 90 days before now when absent; `mailbox`/`account`/`from` narrow further), capped
+rows (`after` defaults to `body_scan_days`, 90, before `before`, or before now, when absent;
+`mailbox`/`account`/`from` narrow further), capped
 at `config.body_scan_max` (default 500) newest rows; each candidate's `.emlx` is parsed and its text body
 (§6; encrypted bodies are skipped) searched for all terms; stops when `limit` hits are found. The response
 says `scanned`, `candidates_total`, `truncated` so the agent can narrow instead of guessing.
@@ -240,7 +241,7 @@ Dropped from 0.5.0: `get_email_links`, `get_email_attachment` (wrote files to di
   sample (formula hits, walk hits, misses), flag-bit cross-check on a sample, keychain S/MIME identities
   (`security find-identity -v -p smime`, count only), and the **decrypt probe**: the newest enveloped
   message is decrypted with `security cms -D -n` (content suppressed) and only the exit status and stderr
-  are reported. `--anon` prints no address, subject, name or path; counts, booleans, timings and hashes only.
+  are reported (`--anon`: the status only). `--anon` prints no address, subject, name or path; counts, booleans, timings and hashes only.
   This is the only real-store output Claude sees.
 - `importin --version`.
 

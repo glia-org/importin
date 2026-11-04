@@ -1,5 +1,8 @@
 use std::process::ExitCode;
 
+use importin::envelope::EnvelopeError;
+use importin::read::OpenError;
+
 const USAGE: &str = "usage: importin [serve | doctor [--anon] [--json] | --version]";
 
 fn main() -> ExitCode {
@@ -11,6 +14,9 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("importin: {e}");
+                if let Some(dump) = schema_dump(&e) {
+                    eprintln!("{dump}");
+                }
                 ExitCode::from(1)
             }
         },
@@ -53,9 +59,20 @@ fn doctor(opts: &importin::doctor::Options) -> ExitCode {
     };
     let report = importin::doctor::run(&config, opts);
     print!("{}", importin::doctor::render(&report, opts.json));
+    if let Some(dump) = &report.schema_dump {
+        eprintln!("importin: the Envelope Index schema did not resolve; its tables:\n{dump}");
+    }
     if importin::doctor::healthy(&report) {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(2)
+    }
+}
+
+/// The `CREATE TABLE` statements of an Envelope Index whose schema did not resolve (DESIGN §4).
+fn schema_dump(e: &anyhow::Error) -> Option<&str> {
+    match e.downcast_ref::<OpenError>()? {
+        OpenError::Envelope(EnvelopeError::Schema { dump, .. }) => Some(dump),
+        _ => None,
     }
 }

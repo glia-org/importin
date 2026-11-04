@@ -29,7 +29,8 @@ data is never served silently. `doctor` reports which path is active (`read-only
 
 - Required: `messages(ROWID, date_received, subject, sender, mailbox)`, `subjects(subject)`,
   `addresses(address)`, `mailboxes(url)`. A missing one stops the server with the missing columns named
-  on stderr.
+  on stderr, followed by the `CREATE TABLE` statements of every table (`doctor` prints them to stderr
+  too).
 - Optional, used when present: `messages(date_sent, subject_prefix, read, flagged, deleted,
   conversation_id, flags, size, summary)`, `addresses(comment)`, `recipients(message, address, type,
   position)` (used only when all four exist), `summaries(summary)` (used only with `messages.summary`).
