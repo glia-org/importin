@@ -6,10 +6,10 @@ Branch `impl`. Implementation tasks 1–11 of [`docs/plan-2026-11-04.md`](docs/p
 done: the crate (`store`, `envelope`, `accounts`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`,
 `tools`, `doctor`, `config`, `log`), the binary (`importin`, `importin serve`, `importin doctor [--anon]
 [--json]`, `importin --version`), the read-only source grep, the budget check, the docs and the release
-workflow, and the final fix wave (account labels from the macOS Accounts database, the deferred rulings
-below). `cargo test`: 167 passed, 1 ignored (the release budget test), no warnings. Everything has run on
-the synthetic store only; nothing has read `~/Library/Mail` yet. Task 12 (real store and opencode switch)
-remains.
+workflow, the final fix wave (account labels from the macOS Accounts database, the deferred rulings
+below), and the fix wave after the whole-branch review (listed under "Since resolved"). `cargo test`: 177
+passed, 1 ignored (the release budget test), no warnings. Everything has run on the synthetic store only;
+nothing has read `~/Library/Mail` yet. Task 12 (real store and opencode switch) remains.
 
 ## Build, test, run
 
@@ -122,11 +122,22 @@ DESIGN §8 `get_thread` (Task 9) was amended in Task 11. The final fix wave reso
 case and the duplicated load code (Task 7), `body_text`'s own locate/read/parse copy (Task 8), the raw
 `eprintln!`s in envelope.rs, the hard-coded "90 days" in the scope description, the missing protocol
 coverage of `mailbox`/`unread`/`flagged`/`offset` and the `tools::date` overflow panic (Task 9), and the
-certificate name in the probe's stderr under `--anon`, now dropped entirely (Task 10).
+certificate name in the probe's stderr under `--anon`, now dropped entirely (Task 10). The fix wave after
+the whole-branch review resolved: zip inflation (Task 8; each docx/pptx part read is cut at 64 MiB, a
+workbook whose declared sizes pass 64 MiB is refused, both with the note "attachment inflates past the 64
+MiB limit"; the release profile now says why `panic = "abort"` must stay out), the missing non-ASCII
+mailbox name (Task 4; the fixture's `Gesendete Objekte Ä` is NFC in the URL and NFD on disk), and the
+opaque signed-only ruling (Task 7; such messages are now decoded, see DESIGN §7). It also made a missing
+`IMPORTIN_CONFIG` file an error, skipped blank `text/plain` parts for the body, added `search_all` and
+`search_participant` to doctor's timings, gave `security cms` an openssl fallback for signed-data it
+refuses, made `serve` exit 2 when the store will not open, matched `scope` in any case, split the body
+scan's hint (stopped at `limit` vs. candidate cap), and cut the tool error log lines to the error's
+variant name.
 
 Deferred rulings, not listed above: a body scan with `before` but no `after` defaults `after` to
 `before − body_scan_days` (Task 9; done in the final fix wave); opaque signed-only messages (pkcs7-mime
-signed-data, not encrypted) stay undecoded (Task 7).
+signed-data, not encrypted) stayed undecoded (Task 7; reversed in the fix wave after the whole-branch
+review: `get_email` and `attachment_text` decode them, the body scan still does not).
 
 Found while writing the docs:
 
@@ -141,7 +152,9 @@ Found while writing the docs:
 
 1. Task 12: `cargo install --path .`, then `importin doctor --anon --json` on the real store (Full Disk
    Access through the app that launches opencode). Read only the anonymised report; any `FAIL` goes back
-   to the owning module before the switch. Record the numbers in `docs/store-format.md`.
+   to the owning module before the switch. Record the numbers in `docs/store-format.md`, the timings
+   included: `open`, `search_header` (scope subject), `search_all` and `search_participant` (these two
+   also match recipients, `all` summaries too) and `get_email`.
 2. Switch opencode: `~/mail/mail.json` `mail` command → `["/Users/paul/.cargo/bin/importin"]`, the `mail`
    agent prompt gets the new scopes and loses the attachment-tool notes, `tools/mail.ts` retires; then the
    yes/no/count smoke run through `opencode api`, and its numbers recorded here.

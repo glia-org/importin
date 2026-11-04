@@ -1,7 +1,8 @@
 # Importin: a read-only MCP server for Apple Mail — design
 
-Amended 2026-11-04 during implementation: see §8 (get_thread, search from, scope body needs a query) and
-§4 (account labels from the Accounts database).
+Amended 2026-11-04 during implementation: see §8 (get_thread, search from, scope body needs a query, its
+hints), §4 (account labels from the Accounts database), §6 (blank text/plain parts) and §7 (opaque
+signed-only messages, the openssl fallback for signed-data).
 
 Status: specification, written 2026-11-04 from the decisions in `docs/design-panel-2026-11-04.html` and the
 user's picks of the same day (all recommendations taken; runtime changed to Rust; name Importin). Nothing is
@@ -130,9 +131,10 @@ Data flow of a `get_email(id)`: `envelope` fetches the row and its recipients �
 
 - `mail-parser` on the raw bytes. Headers of interest: From, To, Cc, Bcc, Reply-To, Date, Subject,
   Message-ID, In-Reply-To, References, Content-Type. Address lists are returned as `[{name, address}]`.
-- Body text: the first `text/plain` part; otherwise the first `text/html` part with tags stripped and
-  entities decoded; otherwise empty with `body_source: "none"`. `body_source` says which. A `max_chars`
-  argument truncates with a `truncated: true` marker, default 20 000.
+- Body text: the first `text/plain` part that is not blank (whitespace only); otherwise the first
+  `text/html` part with tags stripped and entities decoded; otherwise empty with `body_source: "none"`.
+  `body_source` says which. A `max_chars` argument truncates with a `truncated: true` marker, default
+  20 000.
 - Nested `message/rfc822` parts are listed as attachments of type `message/rfc822`, not descended into.
 
 ## 7. S/MIME
@@ -152,10 +154,15 @@ Data flow of a `get_email(id)`: `envelope` fetches the row and its recipients �
     `-legacy` handling documented for Keychain-exported `.p12` files (RC2-40).
 - **Unwrapping.** The decrypted bytes are a MIME entity. If it is `multipart/signed`, the first part is
   the content and `signed: true`. If it is `application/pkcs7-mime; smime-type=signed-data`, run the decoder
-  again (signed-data decodes without a key) and parse the result. Then the usual `multipart/alternative` or
-  `mixed` handling of §6. Signature verification is **not** done in phase 1: the response carries
-  `signature: "not verified"`. Signed-only (unencrypted) messages pass through §6 unchanged with
-  `signed: true` and the `.p7s` part hidden from the attachment list.
+  again (signed-data decodes without a key) and parse the result. `security cms -D` verifies the signature
+  and fails on one it cannot verify; `SecurityCms` then decodes signed-data with `openssl cms -verify
+  -noverify -nosigs` (`smime.openssl_bin`). Then the usual `multipart/alternative` or `mixed` handling of
+  §6. Signature verification is **not** done in phase 1: the response carries `signature: "not
+  verified"`. Signed-only (unencrypted) `multipart/signed` messages pass through §6 unchanged with
+  `signed: true` and the `.p7s` part hidden from the attachment list. Opaque signed-only messages
+  (top-level signed-data) are decoded the same way and their content is the message (body and
+  attachments, `smime.p7m` not listed), with `encrypted: false, decrypted: false, signed: true`; when
+  decoding fails, the outer message as it is plus `error`. The body scan does not decode them.
 - **Response fields.** `encryption: {encrypted, decrypted, method: "security"|"openssl", signed, signature,
   error}`. On failure `decrypted: false`, `body: ""`, `error` with the decoder's message; the headers and
   attachment list from the outer message are still returned.
@@ -171,7 +178,7 @@ one-line message and, where useful, a `hint` (for example "narrow with after: or
 ### `search`
 
 Args: `query` (string, may be empty when filters do the work, except with `scope: body`), `scope` (`all` |
-`subject` | `from` | `to` | `cc` | `participant` | `body`, default `all`), `after`, `before`, `mailbox`
+`subject` | `from` | `to` | `cc` | `participant` | `body`, default `all`, any case), `after`, `before`, `mailbox`
 (substring of the display name), `account` (substring of the account identifier, §4), `from`
 (substring of the sender's address or name; combines with any scope, `body` included), `unread` (bool),
 `flagged` (bool), `limit` (1–200, default 25), `offset`.
@@ -188,7 +195,9 @@ rows (`after` defaults to `body_scan_days`, 90, before `before`, or before now, 
 `mailbox`/`account`/`from` narrow further), capped
 at `config.body_scan_max` (default 500) newest rows; each candidate's `.emlx` is parsed and its text body
 (§6; encrypted bodies are skipped) searched for all terms; stops when `limit` hits are found. The response
-says `scanned`, `candidates_total`, `truncated` so the agent can narrow instead of guessing.
+says `scanned`, `candidates_total`, `truncated` so the agent can narrow instead of guessing, and a `hint`:
+"more hits may exist; raise limit or use offset" when the scan stopped at `limit` hits, else "narrow with
+after:, from: or mailbox:" when the candidate cap was reached.
 
 Returns: `[{id, date_received, subject, from, to, cc, mailbox, account, read, flagged, encrypted, signed,
 has_attachments, snippet}]` where `snippet` is the Envelope Index summary when present, else null.

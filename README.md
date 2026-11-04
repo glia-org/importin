@@ -35,8 +35,8 @@ Then run `importin doctor` (below) from the app that will launch your MCP host.
 **Full Disk Access.** `~/Library/Mail` sits behind Full Disk Access, and macOS asks the app at the top of
 the process chain, not importin: grant it to the app that launches the MCP host (your terminal app for
 opencode and Claude Code, Claude.app for Claude Desktop) in System Settings → Privacy & Security → Full
-Disk Access. Without it the server exits at startup with "missing or access denied (Full Disk Access not
-granted?)" on stderr, and `importin doctor` shows `FAIL full disk access`.
+Disk Access. Without it the server exits at startup, with status 2 and "missing or access denied (Full Disk
+Access not granted?)" on stderr, and `importin doctor` shows `FAIL full disk access`.
 
 ## Tools
 
@@ -53,15 +53,17 @@ The header scopes query the Envelope Index: case-insensitive substrings (ASCII l
 subject, sender, every recipient and Mail's summary, `participant` = sender, To, Cc and Bcc. `scope: body`
 reads message files instead and needs a query: the candidates are the newest `body_scan_max` rows that
 pass the other filters, received since `after` (default `body_scan_days` before `before`, or before
-now); encrypted bodies are never searched; the reply adds `scanned` and `candidates_total`, and `truncated` with a hint to narrow when the
-scan stopped at `limit` hits or the candidate cap was reached. Ids are only good within a session (Mail
+now); encrypted bodies are never searched; the reply adds `scanned` and `candidates_total`, and `truncated`
+with a hint: raise `limit` or use `offset` when the scan stopped at `limit` hits, narrow when the candidate
+cap was reached. Ids are only good within a session (Mail
 renumbers rows when it rebuilds its index); `message_id` is durable. Deleted messages are left out of
 searches, threads and counts; excluded accounts are invisible to every tool.
 
 ## Configuration
 
-`~/.config/importin/config.toml`, or the file named by `IMPORTIN_CONFIG`. Every key is optional; these are
-the defaults. An unknown key is an error at startup.
+`~/.config/importin/config.toml`, or the file named by `IMPORTIN_CONFIG`, which must exist (a missing
+default file means the defaults). Every key is optional; these are the defaults. An unknown key is an error
+at startup.
 
 ```toml
 mail_root = "~/Library/Mail"    # IMPORTIN_MAIL_ROOT overrides it
@@ -74,7 +76,8 @@ body_scan_max = 500             # candidate cap of scope body
 decryptor = "security"          # or "openssl"
 # key = "~/.config/importin/smime-key.pem"    # openssl only, required with it
 # cert = "~/.config/importin/smime-cert.pem"  # openssl only, required with it
-openssl_bin = "openssl"         # the openssl binary, looked up on PATH
+openssl_bin = "openssl"         # the openssl binary, looked up on PATH; also unpacks signed content
+                                # that security refuses
 ```
 
 Account names come from the macOS Accounts database, `~/Library/Accounts/Accounts4.sqlite` (read-only;
@@ -102,7 +105,8 @@ optional columns exist), whether the index is read in place or from a snapshot c
 message, mailbox and account counts, excluded accounts, whether Mail is running, the index's mtime, the
 mailbox URL form, how the 20 newest messages' files were found (formula, walk, missing), the encrypted
 flag bit against the content type on the same sample, the number of S/MIME identities in the keychain, a
-decrypt probe on the newest encrypted message, and three timings. It exits 0 when Full Disk Access is
+decrypt probe on the newest encrypted message, and timings (`open`, a header search in scopes `subject`
+(`search_header`), `all` and `participant`, one `get_email`). It exits 0 when Full Disk Access is
 granted and the schema resolved, else 2. The report never holds message content or subjects; `--anon`
 also drops the account identifiers, exclusion patterns and mail root, replaces paths, URLs and addresses
 in error text with `<path>`, `<url>` and `<addr>`, and drops the probe's stderr (its exit status stays).
@@ -113,6 +117,13 @@ report.
 
 Encrypted messages are decrypted per request; the plaintext lives in the response only and is never
 written to disk. Signatures are not verified: a signed message says `signature: "not verified"`.
+
+- **Signed only.** A `multipart/signed` message is read as it is, its `smime.p7s` not listed. An opaque
+  one (`application/pkcs7-mime; smime-type=signed-data`, a single `smime.p7m`) is unpacked, and its
+  content is the body and attachments; `encryption` says `signed: true, encrypted: false`. `security cms
+  -D` refuses a signature it cannot verify, so the `security` decryptor falls back to `openssl cms -verify
+  -noverify -nosigs` (`openssl_bin`; macOS's `/usr/bin/openssl` does this too) for signed content. Body
+  search does not unpack opaque signed messages.
 
 - **`security` (default).** importin pipes the encrypted body to `/usr/bin/security cms -D`, which finds
   the private key among the identities of the keychain search list, normally your login keychain (`security
