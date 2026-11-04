@@ -3,11 +3,12 @@
 ## State (2026-11-04)
 
 Branch `impl`. Implementation tasks 1–11 of [`docs/plan-2026-11-04.md`](docs/plan-2026-11-04.md) are
-done: the crate (`store`, `envelope`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`, `tools`,
-`doctor`, `config`, `log`), the binary (`importin`, `importin serve`, `importin doctor [--anon] [--json]`,
-`importin --version`), the read-only source grep, the budget check, the docs and the release workflow.
-`cargo test`: 150 passed, 1 ignored (the release budget test), no warnings. Everything has run on the
-synthetic store only; nothing has read `~/Library/Mail` yet. Task 12 (real store and opencode switch)
+done: the crate (`store`, `envelope`, `accounts`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`,
+`tools`, `doctor`, `config`, `log`), the binary (`importin`, `importin serve`, `importin doctor [--anon]
+[--json]`, `importin --version`), the read-only source grep, the budget check, the docs and the release
+workflow, and the final fix wave (account labels from the macOS Accounts database, the deferred rulings
+below). `cargo test`: 167 passed, 1 ignored (the release budget test), no warnings. Everything has run on
+the synthetic store only; nothing has read `~/Library/Mail` yet. Task 12 (real store and opencode switch)
 remains.
 
 ## Build, test, run
@@ -20,10 +21,11 @@ cargo install --path .         # ~/.cargo/bin/importin
 importin doctor --anon --json  # the real store, no account names, paths or addresses
 ```
 
-The tests never touch `~/Library/Mail`: `tests/support/fixture.rs` builds a `Mail/V10` tree and the binary
-is pointed at it with `IMPORTIN_MAIL_ROOT`. The S/MIME tests need `openssl` on `PATH` (here Homebrew's
-OpenSSL 3; they skip without it). `tests/doctor.rs` runs `security find-identity -v -p
-smime` on the real keychain (read-only, count only).
+The tests never touch `~/Library/Mail` or `~/Library/Accounts`: `tests/support/fixture.rs` builds a
+`Mail/V10` tree and a synthetic `Accounts4.sqlite`, and the binary is pointed at them with
+`IMPORTIN_MAIL_ROOT` and `IMPORTIN_ACCOUNTS_DB` (a test that builds a `Config` must set both). The S/MIME
+tests need `openssl` on `PATH` (here Homebrew's OpenSSL 3; they skip without it). `tests/doctor.rs` runs
+`security find-identity -v -p smime` on the real keychain (read-only, count only).
 
 Budgets (DESIGN §2), last measured 2026-11-04 on this Mac (Apple Silicon), release build, 2 000 messages,
 after one warm-up launch:
@@ -48,6 +50,9 @@ freshly built binary costs ~0.7 s before `main` on macOS (a policy check), hence
   -decrypt` but has never decrypted real AES-GCM data.
 - **Flag-bit layout** (bit 3 encrypted, 23 signed, 10–15 attachment count, …): two published layouts
   disagree. The content type decides encryption; `doctor`'s flag check compares bit 3 against it.
+- **Account labels**: `ZACCOUNT`/`ZACCOUNTTYPE` of `~/Library/Accounts/Accounts4.sqlite` were checked by
+  hand for the four Mail uuids; `accounts::load` itself has only read the fixture. If it fails, accounts
+  show their uuids (logged at debug).
 - Also not yet seen on the real store: the mailbox URL form (`imap-user-host`, `mailbox-uuid`, mixed),
   the snapshot fallback when the read-only open is refused, and the budgets at 100 000 messages.
 
@@ -113,17 +118,20 @@ Collected from the review ledger (`.superpowers/sdd/plan-2026-11-04/progress.md`
 Since resolved: the `immutable=1` check (Task 2) is `tests/readonly.rs`; `config.rs`'s rustfmt drift
 (Tasks 4, 6, 7) went in `style: cargo fmt`; the empty-query body scan and the `body_scan_days` cap (Task 7)
 were settled in Task 9 (tool error; at most 36500); slide ordering (Task 8) is tested in `src/attach.rs`;
-DESIGN §8 `get_thread` (Task 9) was amended in Task 11.
+DESIGN §8 `get_thread` (Task 9) was amended in Task 11. The final fix wave resolved: the p7m filter's
+case and the duplicated load code (Task 7), `body_text`'s own locate/read/parse copy (Task 8), the raw
+`eprintln!`s in envelope.rs, the hard-coded "90 days" in the scope description, the missing protocol
+coverage of `mailbox`/`unread`/`flagged`/`offset` and the `tools::date` overflow panic (Task 9), and the
+certificate name in the probe's stderr under `--anon`, now dropped entirely (Task 10).
 
-Deferred rulings, not listed above: a body scan with `before` but no `after` should default `after` to
-`before − body_scan_days` (Task 9; today it uses now − `body_scan_days`, so an old `before` scans nothing);
-opaque signed-only messages (pkcs7-mime signed-data, not encrypted) stay undecoded (Task 7).
+Deferred rulings, not listed above: a body scan with `before` but no `after` defaults `after` to
+`before − body_scan_days` (Task 9; done in the final fix wave); opaque signed-only messages (pkcs7-mime
+signed-data, not encrypted) stay undecoded (Task 7).
 
 Found while writing the docs:
 
-- DESIGN §4 says a missing required column aborts "with the actual schema printed to stderr".
-  `EnvelopeError::Schema` collects the `CREATE TABLE` statements in `dump`, but nothing prints them;
-  stderr names only the missing columns.
+- DESIGN §4 says a missing required column aborts "with the actual schema printed to stderr". Done in
+  the final fix wave: `serve` and `doctor` print `EnvelopeError::Schema`'s `dump` to stderr.
 - DESIGN drift left in place: §2's grep list (`imap`, `send_`, `move_`, `delete_`, …) differs from
   `tests/readonly.rs`; §7 names `OpensslPem` and the `openssl` crate, but the code shells out to `openssl
   cms` (`OpensslCli`, `smime.openssl_bin`); §8 `get_email`'s `html` returns the raw HTML part as
@@ -137,7 +145,5 @@ Found while writing the docs:
 2. Switch opencode: `~/mail/mail.json` `mail` command → `["/Users/paul/.cargo/bin/importin"]`, the `mail`
    agent prompt gets the new scopes and loses the attachment-tool notes, `tools/mail.ts` retires; then the
    yes/no/count smoke run through `opencode api`, and its numbers recorded here.
-3. The final fix wave: the deferred rulings above and the "final fix wave" items of Tasks 9 and 10.
-4. Before `cargo publish`: `Cargo.toml` has no `license`, `description` or `repository` yet, which
-   crates.io requires (the first two) or expects; the release workflow runs on the first `v*` tag once the
-   repo is on GitHub.
+3. Before `cargo publish`: the release workflow runs on the first `v*` tag once the repo is on GitHub
+   (`Cargo.toml` now carries `license`, `description`, `repository`, `keywords`, `categories`, `readme`).
