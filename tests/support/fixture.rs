@@ -33,7 +33,7 @@
 //! | single_dash | 107 | INBOX | payload ends `--b107-` (one dash short) directly before the plist |
 //! | rfc822_nested | 108 | INBOX | `Fwd: ` prefix; multipart/mixed: 1 text, 2 message/rfc822 `original.eml` whose body is multipart/alternative (2.1 plain, 2.2 html) |
 //! | signed_only | 109 | INBOX | multipart/signed: 1 text "I hereby sign this statement.", 2 fake `smime.p7s`; flag bit 23 |
-//! | encrypted | 110 | INBOX | `None` without openssl. enveloped-data (aes256) over multipart/signed over multipart/alternative "the sealed sentence"; subject "sealed", from probe@example.test; flag bit 3; no summary |
+//! | encrypted | 110 | INBOX | `None` without openssl. enveloped-data (aes256) over multipart/signed over multipart/mixed: 1 multipart/alternative "the sealed sentence", 2 inline attachment `sealed.txt` "sealed attachment text"; subject "sealed", from probe@example.test; flag bit 3; no summary |
 //! | deleted | 111 | INBOX | `deleted = 1`, flag bit 1 |
 //! | thread | 112, 113, 114 | INBOX, Sent Messages, INBOX | "Project kickoff", `Re: ` on 113 and 114, `conversation_id = 7`, oldest first, In-Reply-To/References chain |
 //! | cc_target | 115 | INBOX | To Paul Example <paul@example.test>, Bob Example <bob@example.test>; Cc Carol Example <carol@example.test>; Bcc Dave Example <dave@example.test>; Carol and Dave appear in no other message |
@@ -965,10 +965,14 @@ pub fn pptx() -> Vec<u8> {
     ])
 }
 
-const INNER: &str = "Content-Type: multipart/alternative; boundary=\"sealed-alt\"\n\n\
+const INNER: &str = "Content-Type: multipart/mixed; boundary=\"sealed-mix\"\n\n\
+--sealed-mix\nContent-Type: multipart/alternative; boundary=\"sealed-alt\"\n\n\
 --sealed-alt\nContent-Type: text/plain; charset=utf-8\n\nthe sealed sentence\n\
 --sealed-alt\nContent-Type: text/html; charset=utf-8\n\n<p>the sealed sentence</p>\n\
---sealed-alt--\n";
+--sealed-alt--\n\
+--sealed-mix\nContent-Type: text/plain; charset=utf-8; name=\"sealed.txt\"\n\
+Content-Disposition: attachment; filename=\"sealed.txt\"\n\nsealed attachment text\n\
+--sealed-mix--\n";
 
 /// Throwaway key and cert plus an enveloped(signed(INNER)) RFC 822 message, all made by `openssl`.
 fn make_smime(dir: &Path) -> Result<(SmimeKeys, Vec<u8>), String> {

@@ -107,7 +107,7 @@ fn openssl_decrypts_fixture_to_signed_inner() {
     assert!(u.signed);
     assert_eq!(u.layers, ["enveloped", "multipart/signed"]);
     let inner = mime::parse(&u.inner).unwrap();
-    assert_eq!(inner.headers().content_type, "multipart/alternative");
+    assert_eq!(inner.headers().content_type, "multipart/mixed");
     assert!(body_text(&u).contains("the sealed sentence"));
 }
 

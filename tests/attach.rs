@@ -1,6 +1,7 @@
 mod support;
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::process::Command;
 
 use importin::attach;
@@ -23,6 +24,14 @@ fn config(fx: &Fixture) -> Config {
 
 fn ctx(fx: &Fixture) -> Context {
     read::open(config(fx)).unwrap()
+}
+
+fn openssl_ctx(fx: &Fixture, key: &Path, cert: &Path) -> Context {
+    let mut cfg = config(fx);
+    cfg.smime.decryptor = DecryptorKind::Openssl;
+    cfg.smime.key = Some(key.to_path_buf());
+    cfg.smime.cert = Some(cert.to_path_buf());
+    read::open(cfg).unwrap()
 }
 
 fn text(c: &Context, id: i64, filename: Option<&str>, index: Option<usize>) -> attach::Extracted {
@@ -212,11 +221,30 @@ fn read_attachment_text_encrypted_failure_is_a_decryption_error() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    let mut cfg = config(&fx);
-    cfg.smime.decryptor = DecryptorKind::Openssl;
-    cfg.smime.key = Some(dir.path().join("other.key"));
-    cfg.smime.cert = Some(dir.path().join("other.crt"));
-    let c = read::open(cfg).unwrap();
+    let c = openssl_ctx(
+        &fx,
+        &dir.path().join("other.key"),
+        &dir.path().join("other.crt"),
+    );
     let err = error(&c, id, None, Some(0));
     assert!(matches!(err, ReadError::Decrypt(_)), "{err:?}");
+}
+
+#[test]
+fn attachment_text_of_decrypted_message() {
+    let fx = fixture::build(Epoch::Unix);
+    let (Some(keys), Some(id)) = (&fx.smime, fx.ids.encrypted) else {
+        eprintln!("skipped: the fixture has no S/MIME message (no openssl)");
+        return;
+    };
+    let c = openssl_ctx(&fx, &keys.key, &keys.cert);
+    let e = text(&c, id, Some("sealed.txt"), None);
+    assert!(
+        e.text.contains("sealed attachment text"),
+        "text: {:?}",
+        e.text
+    );
+    assert_eq!(e.filename, "sealed.txt");
+    assert_eq!(e.mime_type, "text/plain");
+    assert_eq!(e.state, AttachmentState::Inline);
 }

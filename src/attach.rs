@@ -201,7 +201,9 @@ fn xml_text(xml: &str, text: &str, para: &str) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{guarded, xml_text};
+    use std::io::{Cursor, Write};
+
+    use super::{guarded, pptx, xml_text};
 
     #[test]
     fn a_parser_panic_becomes_a_note() {
@@ -214,5 +216,25 @@ mod tests {
     fn xml_text_resolves_references_and_skips_other_elements() {
         let xml = "<w:p><w:r><w:t>a &amp; b &#233;</w:t></w:r><w:x>no</w:x></w:p><w:t>c</w:t>";
         assert_eq!(xml_text(xml, "w:t", "w:p").unwrap(), "a & b \u{e9}\nc");
+    }
+
+    #[test]
+    fn pptx_slides_in_numeric_order() {
+        let slide = |t: &str| format!("<p:sld><a:p><a:r><a:t>{t}</a:t></a:r></a:p></p:sld>");
+        let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        for (name, body) in [
+            ("ppt/slides/slide10.xml", slide("ten")),
+            ("ppt/slides/slide2.xml", slide("two")),
+            (
+                "ppt/slides/_rels/slide2.xml.rels",
+                "<Relationships/>".to_string(),
+            ),
+        ] {
+            w.start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            w.write_all(body.as_bytes()).unwrap();
+        }
+        let bytes = w.finish().unwrap().into_inner();
+        assert_eq!(pptx(&bytes).unwrap(), "== slide 2\ntwo\n== slide 10\nten\n");
     }
 }

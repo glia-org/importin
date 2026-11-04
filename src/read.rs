@@ -1,18 +1,18 @@
 //! Compose one message (index row + emlx + MIME + S/MIME) and search, with a bounded body scan.
 //! Decrypted content lives only in the returned `Email`; nothing is cached or written.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde::Serialize;
 
 use crate::attach::{self, Extracted};
 use crate::config::Config;
-use crate::emlx::{self, EmlxError, Flags};
+use crate::emlx::{self, Emlx, EmlxError, Flags};
 use crate::envelope::{self, Address, EnvelopeError, Filter, MessageRow, Scope};
 use crate::mime::{self, AttachmentInfo, AttachmentState, Body, BodySource, MimeError};
 use crate::paths::{Locator, PathError};
-use crate::smime::{self, DecryptError, Decryptor, EncryptionInfo};
+use crate::smime::{self, DecryptError, Decryptor, EncryptionInfo, Unwrapped};
 use crate::store::{self, StoreError};
 
 const HINT: &str = "narrow with after:, from: or mailbox:";
@@ -135,75 +135,70 @@ pub struct SearchResult {
 }
 
 pub fn get_email(ctx: &Context, id: i64, max_chars: usize, html: bool) -> Result<Email, ReadError> {
-    let row = ctx.env.get(id)?.ok_or(ReadError::NotFound(id))?;
-    let located =
-        ctx.locator
-            .locate(id, &row.mailbox_url)?
-            .ok_or_else(|| ReadError::FileMissing {
-                id,
-                mailbox: row.mailbox.clone(),
-            })?;
-    let file = emlx::read(&located.emlx)?;
-    let outer = mime::parse(&file.raw)?;
+    let Loaded {
+        row,
+        file,
+        attachments_dir,
+    } = load(ctx, id)?;
+    let (outer, unwrapped) = unwrap_outer(ctx, &file.raw)?;
     let headers = outer.headers();
-    let dir = Some(located.attachments_dir.as_path());
+    let dir = Some(attachments_dir.as_path());
+    let method = ctx.decryptor.name();
 
-    let (body, attachments, encryption) = if outer.is_enveloped() {
-        let method = ctx.decryptor.name();
-        match smime::unwrap(&outer, ctx.decryptor.as_ref()) {
-            Ok(unwrapped) => {
-                let inner = mime::parse(&unwrapped.inner)?;
-                let encryption = EncryptionInfo {
-                    encrypted: true,
-                    decrypted: true,
-                    method: Some(method.into()),
-                    signed: unwrapped.signed,
-                    signature: if unwrapped.signed {
-                        "not verified"
-                    } else {
-                        "none"
-                    }
-                    .into(),
-                    error: None,
-                };
-                // The parts of the decrypted entity are inline; the Attachments dir belongs to
-                // the outer message's part numbers.
-                (
-                    inner.body(max_chars, html),
-                    inner.attachments(None),
-                    encryption,
-                )
-            }
-            Err(err) => {
-                let attachments = outer
-                    .attachments(dir)
-                    .into_iter()
-                    .filter(|a| !is_pkcs7_mime(&a.mime_type))
-                    .collect();
-                let body = Body {
-                    text: String::new(),
-                    source: BodySource::None,
-                    html: None,
-                    truncated: false,
-                };
-                (body, attachments, EncryptionInfo::failed(method, &err))
-            }
+    let (body, attachments, encryption) = match unwrapped {
+        Some(Ok(unwrapped)) => {
+            let inner = mime::parse(&unwrapped.inner)?;
+            let encryption = EncryptionInfo {
+                encrypted: true,
+                decrypted: true,
+                method: Some(method.into()),
+                signed: unwrapped.signed,
+                signature: if unwrapped.signed {
+                    "not verified"
+                } else {
+                    "none"
+                }
+                .into(),
+                error: None,
+            };
+            // The parts of the decrypted entity are inline; the Attachments dir belongs to
+            // the outer message's part numbers.
+            (
+                inner.body(max_chars, html),
+                inner.attachments(None),
+                encryption,
+            )
         }
-    } else {
-        let encryption = if outer.is_signed() {
-            EncryptionInfo {
-                signed: true,
-                signature: "not verified".into(),
-                ..EncryptionInfo::none()
-            }
-        } else {
-            EncryptionInfo::none()
-        };
-        (
-            outer.body(max_chars, html),
-            outer.attachments(dir),
-            encryption,
-        )
+        Some(Err(err)) => {
+            let attachments = outer
+                .attachments(dir)
+                .into_iter()
+                .filter(|a| !is_pkcs7_mime(&a.mime_type))
+                .collect();
+            let body = Body {
+                text: String::new(),
+                source: BodySource::None,
+                html: None,
+                truncated: false,
+            };
+            (body, attachments, EncryptionInfo::failed(method, &err))
+        }
+        None => {
+            let encryption = if outer.is_signed() {
+                EncryptionInfo {
+                    signed: true,
+                    signature: "not verified".into(),
+                    ..EncryptionInfo::none()
+                }
+            } else {
+                EncryptionInfo::none()
+            };
+            (
+                outer.body(max_chars, html),
+                outer.attachments(dir),
+                encryption,
+            )
+        }
     };
 
     Ok(Email {
@@ -246,6 +241,31 @@ pub fn attachment_text(
     index: Option<usize>,
     max_chars: usize,
 ) -> Result<Extracted, ReadError> {
+    let Loaded {
+        file,
+        attachments_dir,
+        ..
+    } = load(ctx, id)?;
+    let (outer, unwrapped) = unwrap_outer(ctx, &file.raw)?;
+    match unwrapped {
+        Some(unwrapped) => {
+            let unwrapped = unwrapped?;
+            let inner = mime::parse(&unwrapped.inner)?;
+            extract_one(&inner, None, filename, index, max_chars)
+        }
+        None => extract_one(&outer, Some(&attachments_dir), filename, index, max_chars),
+    }
+}
+
+/// A message's index row and emlx file. `get_email` and `attachment_text` both load through
+/// `load` and `unwrap_outer`, so they find, read and unwrap a message the same way.
+struct Loaded {
+    row: MessageRow,
+    file: Emlx,
+    attachments_dir: PathBuf,
+}
+
+fn load(ctx: &Context, id: i64) -> Result<Loaded, ReadError> {
     let row = ctx.env.get(id)?.ok_or(ReadError::NotFound(id))?;
     let located =
         ctx.locator
@@ -255,15 +275,22 @@ pub fn attachment_text(
                 mailbox: row.mailbox.clone(),
             })?;
     let file = emlx::read(&located.emlx)?;
-    let outer = mime::parse(&file.raw)?;
-    if outer.is_enveloped() {
-        let unwrapped = smime::unwrap(&outer, ctx.decryptor.as_ref())?;
-        let inner = mime::parse(&unwrapped.inner)?;
-        extract_one(&inner, None, filename, index, max_chars)
-    } else {
-        let dir = Some(located.attachments_dir.as_path());
-        extract_one(&outer, dir, filename, index, max_chars)
-    }
+    Ok(Loaded {
+        row,
+        file,
+        attachments_dir: located.attachments_dir,
+    })
+}
+
+/// The parsed outer message and, when it is enveloped, the outcome of unwrapping it.
+type Opened<'a> = (mime::Parsed<'a>, Option<Result<Unwrapped, DecryptError>>);
+
+fn unwrap_outer<'a>(ctx: &Context, raw: &'a [u8]) -> Result<Opened<'a>, ReadError> {
+    let outer = mime::parse(raw)?;
+    let unwrapped = outer
+        .is_enveloped()
+        .then(|| smime::unwrap(&outer, ctx.decryptor.as_ref()));
+    Ok((outer, unwrapped))
 }
 
 fn extract_one(
