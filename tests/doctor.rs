@@ -313,7 +313,7 @@ fn flag_check_counts_each_kind_of_disagreement() {
     assert_eq!(f.encrypted_flag_and_type_agree, 20 - 1 - clear);
     let text = doctor::render(&r, false);
     let expected = format!(
-        "FAIL flag check: 20 sampled: {} agree, {} disagree, 0 unreadable",
+        "warn flag check: 20 sampled: {} agree, {} disagree, 0 unreadable (hint only; the content type decides)",
         19 - clear,
         1 + clear
     );

@@ -632,15 +632,22 @@ pub fn render(r: &Report, json: bool) -> String {
         None => line("--", "path sample", "not run".into()),
     }
     match &r.flag_check {
+        // The flag bit is a hint; the content type decides encryption, so a
+        // disagreement is a warning, not a failure.
         Some(f) => line(
-            mark(f.disagree == 0),
+            if f.disagree == 0 { "ok" } else { "warn" },
             "flag check",
             format!(
-                "{} sampled: {} agree, {} disagree, {} unreadable",
+                "{} sampled: {} agree, {} disagree, {} unreadable{}",
                 f.sampled,
                 f.encrypted_flag_and_type_agree,
                 f.disagree,
-                f.sampled - f.encrypted_flag_and_type_agree - f.disagree
+                f.sampled - f.encrypted_flag_and_type_agree - f.disagree,
+                if f.disagree == 0 {
+                    ""
+                } else {
+                    " (hint only; the content type decides)"
+                }
             ),
         ),
         None => line("--", "flag check", "not run".into()),
