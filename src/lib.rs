@@ -1,5 +1,6 @@
 pub mod attach;
 pub mod config;
+pub mod doctor;
 pub mod emlx;
 pub mod envelope;
 pub mod log;

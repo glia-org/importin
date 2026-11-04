@@ -19,8 +19,11 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Some("doctor") if args[1..].iter().all(|a| a == "--anon" || a == "--json") => {
-            eprintln!("importin: doctor not implemented");
-            ExitCode::from(2)
+            doctor(&importin::doctor::Options {
+                anon: args.iter().any(|a| a == "--anon"),
+                json: args.iter().any(|a| a == "--json"),
+                ..Default::default()
+            })
         }
         _ => {
             eprintln!("{USAGE}");
@@ -36,4 +39,23 @@ fn serve() -> anyhow::Result<()> {
     }
     let config = importin::config::load()?;
     tokio::runtime::Runtime::new()?.block_on(importin::tools::serve(config, channel))
+}
+
+/// The one command that writes its result to stdout. Exits 2 unless Full Disk Access is granted and
+/// the schema resolved.
+fn doctor(opts: &importin::doctor::Options) -> ExitCode {
+    let config = match importin::config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("importin: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let report = importin::doctor::run(&config, opts);
+    print!("{}", importin::doctor::render(&report, opts.json));
+    if importin::doctor::healthy(&report) {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(2)
+    }
 }

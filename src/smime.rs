@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::config::{DecryptorKind, SmimeConfig};
 use crate::mime;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const TIMEOUT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(20);
 const STDERR_TAIL: usize = 600;
 
@@ -201,7 +201,11 @@ impl EncryptionInfo {
 /// Run `cmd` with `input` on stdin; stdout on success. stdin is written and stdout/stderr are read
 /// on their own threads, so a full pipe never blocks the child. On timeout the child is killed and
 /// the pipe threads are left to finish when the pipes close.
-fn run(mut cmd: Command, input: &[u8], timeout: Duration) -> Result<Vec<u8>, DecryptError> {
+pub(crate) fn run(
+    mut cmd: Command,
+    input: &[u8],
+    timeout: Duration,
+) -> Result<Vec<u8>, DecryptError> {
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
