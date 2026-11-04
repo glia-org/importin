@@ -2,7 +2,7 @@
 //! detect the timestamp epoch, and run the metadata queries (search, get, thread, mailboxes,
 //! accounts). Nothing is ever written.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -135,6 +135,8 @@ pub struct Filter {
     pub mailbox: Option<String>,
     /// Case-insensitive substring of the account identifier.
     pub account: Option<String>,
+    /// Substring of the sender's address or name, with any scope (`Body` too).
+    pub from: Option<String>,
     pub unread: bool,
     pub flagged: bool,
     pub include_deleted: bool,
@@ -188,11 +190,9 @@ pub struct Envelope {
     epoch_offset: i64,
     /// Lowercase `table.column` of every column of `TABLES`, plus `table.rowid`.
     columns: HashSet<String>,
-    /// Mailbox ROWIDs of excluded accounts, fixed at open.
-    excluded_mailboxes: BTreeSet<i64>,
-    /// `" AND messages.mailbox NOT IN (…)"`, or empty.
-    not_excluded: String,
-    /// `SELECT … FROM messages … WHERE 1<not_excluded>`; callers append `AND …`.
+    /// `exclude_accounts`, lowercased; matched against the mailboxes on every query.
+    patterns: Vec<glob::Pattern>,
+    /// `SELECT … FROM messages … WHERE 1`; callers append the exclusion and `AND …`.
     select: String,
     recipients: Option<String>,
     pub mode: OpenMode,
@@ -204,7 +204,7 @@ pub fn open(store: &Store, exclude_accounts: &[String]) -> Result<Envelope, Enve
     let patterns = exclude_accounts
         .iter()
         .map(|p| {
-            glob::Pattern::new(p).map_err(|source| EnvelopeError::Pattern {
+            glob::Pattern::new(&p.to_lowercase()).map_err(|source| EnvelopeError::Pattern {
                 pattern: p.clone(),
                 source,
             })
@@ -252,21 +252,6 @@ pub fn open(store: &Store, exclude_accounts: &[String]) -> Result<Envelope, Enve
     };
     let epoch_offset = detect_epoch(&conn).map_err(EnvelopeError::Open)?;
 
-    let mut excluded_mailboxes = BTreeSet::new();
-    if !patterns.is_empty() {
-        for (id, url) in mailbox_urls(&conn).map_err(EnvelopeError::Open)? {
-            if is_excluded(&parse_mailbox_url(&url), &patterns) {
-                excluded_mailboxes.insert(id);
-            }
-        }
-    }
-    let not_excluded = if excluded_mailboxes.is_empty() {
-        String::new()
-    } else {
-        let ids: Vec<String> = excluded_mailboxes.iter().map(i64::to_string).collect();
-        format!(" AND messages.mailbox NOT IN ({})", ids.join(", "))
-    };
-
     let col = |c: &'static str| if has(c) { c } else { "NULL" };
     let comment = |alias: &str| {
         if has("addresses.comment") {
@@ -290,7 +275,7 @@ pub fn open(store: &Store, exclude_accounts: &[String]) -> Result<Envelope, Enve
          LEFT JOIN subjects ON subjects.ROWID = messages.subject \
          LEFT JOIN addresses sa ON sa.ROWID = messages.sender \
          LEFT JOIN mailboxes ON mailboxes.ROWID = messages.mailbox{summaries_join} \
-         WHERE 1{not_excluded}",
+         WHERE 1",
         col("messages.date_sent"),
         col("messages.subject_prefix"),
         comment("sa"),
@@ -314,8 +299,7 @@ pub fn open(store: &Store, exclude_accounts: &[String]) -> Result<Envelope, Enve
         schema,
         epoch_offset,
         columns,
-        excluded_mailboxes,
-        not_excluded,
+        patterns,
         select,
         recipients,
         mode,
@@ -336,10 +320,13 @@ fn connect(path: &Path) -> rusqlite::Result<Connection> {
         | OpenFlags::SQLITE_OPEN_NO_MUTEX;
     let conn = Connection::open_with_flags(format!("file:{p}?mode=ro"), flags)?;
     conn.busy_timeout(Duration::from_secs(2))?;
+    // SQLite opens lazily: an unreadable `-wal`/`-shm` only shows on the first read.
+    conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))?;
     Ok(conn)
 }
 
-/// Copies the index and those of its `-wal`/`-shm` that exist into a private temp dir.
+/// Copies the index and those of its `-wal`/`-shm` that exist into a private temp dir. An unreadable
+/// `-shm` is left out: it is only the WAL's index, and SQLite rebuilds it from the `-wal`.
 fn snapshot(index: &Path) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
     let dir = tempfile::tempdir()?;
     let copy = dir
@@ -352,8 +339,14 @@ fn snapshot(index: &Path) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
             s.push(suffix);
             PathBuf::from(s)
         };
-        if with(index).exists() {
-            std::fs::copy(with(index), with(&copy))?;
+        if !with(index).exists() {
+            continue;
+        }
+        if let Err(e) = std::fs::copy(with(index), with(&copy)) {
+            if suffix != "-shm" {
+                return Err(e);
+            }
+            eprintln!("importin: snapshot without -shm: {e}");
         }
     }
     Ok((dir, copy))
@@ -410,12 +403,19 @@ fn mailbox_urls(conn: &Connection) -> rusqlite::Result<Vec<(i64, String)>> {
     .collect()
 }
 
-/// Any pattern matching the user, host, `user@host` or account uuid excludes the mailbox.
+/// Any (lowercased) pattern matching the lowercased user, host, `user@host` or account uuid
+/// excludes the mailbox. Empty components are never matched, nor `user@host` unless both are set.
 fn is_excluded(u: &UrlParts, patterns: &[glob::Pattern]) -> bool {
-    let user_host = format!("{}@{}", u.user, u.host);
-    let mut names = vec![u.user.as_str(), u.host.as_str(), user_host.as_str()];
-    names.extend(u.account_uuid.as_deref());
-    patterns.iter().any(|p| names.iter().any(|n| p.matches(n)))
+    let mut names = vec![u.user.clone(), u.host.clone()];
+    if !u.user.is_empty() && !u.host.is_empty() {
+        names.push(format!("{}@{}", u.user, u.host));
+    }
+    names.extend(u.account_uuid.clone());
+    names
+        .iter()
+        .filter(|n| !n.is_empty())
+        .map(|n| n.to_lowercase())
+        .any(|n| patterns.iter().any(|p| p.matches(&n)))
 }
 
 /// `%term%` with `%`, `_` and `\` escaped for `LIKE … ESCAPE '\'`.
@@ -444,7 +444,7 @@ impl Envelope {
     /// Every term must match within `f.scope`; newest first. `Scope::Body` ignores the terms and
     /// applies only the other filters (the caller scans the bodies).
     pub fn search(&self, f: &Filter) -> Result<Vec<MessageRow>, EnvelopeError> {
-        let mut sql = self.select.clone();
+        let mut sql = self.select.clone() + &self.exclusion()?;
         let mut p = Vec::new();
         if !f.include_deleted {
             sql += &format!(" AND {} = 0", self.or_zero("messages.deleted"));
@@ -453,17 +453,18 @@ impl Envelope {
             let mailbox = f.mailbox.as_deref().map(str::to_lowercase);
             let account = f.account.as_deref().map(str::to_lowercase);
             let ids: Vec<String> = self
-                .visible_mailboxes()?
+                .scan()?
                 .into_iter()
-                .filter(|(_, _, u)| {
-                    mailbox
-                        .as_ref()
-                        .is_none_or(|m| u.mailbox_name.to_lowercase().contains(m))
+                .filter(|b| {
+                    !b.excluded
+                        && mailbox
+                            .as_ref()
+                            .is_none_or(|m| b.parts.mailbox_name.to_lowercase().contains(m))
                         && account
                             .as_ref()
-                            .is_none_or(|a| u.identifier.to_lowercase().contains(a))
+                            .is_none_or(|a| b.parts.identifier.to_lowercase().contains(a))
                 })
-                .map(|(id, ..)| id.to_string())
+                .map(|b| b.id.to_string())
                 .collect();
             if ids.is_empty() {
                 return Ok(Vec::new());
@@ -484,6 +485,11 @@ impl Envelope {
         if f.flagged {
             sql += &format!(" AND {} != 0", self.or_zero("messages.flagged"));
         }
+        if let Some(from) = f.from.as_deref().filter(|s| !s.is_empty()) {
+            let clause = self.address_like("sa", &like_pattern(from), &mut p);
+            sql += " AND ";
+            sql += &clause;
+        }
         if f.scope != Scope::Body {
             for term in f.terms.iter().filter(|t| !t.is_empty()) {
                 let clause = self.term(f.scope, &like_pattern(term), &mut p);
@@ -499,7 +505,11 @@ impl Envelope {
 
     /// The row, deleted or not; `None` if absent or in an excluded account.
     pub fn get(&self, id: i64) -> Result<Option<MessageRow>, EnvelopeError> {
-        let sql = format!("{} AND messages.ROWID = ?", self.select);
+        self.get_with(id, &self.exclusion()?)
+    }
+
+    fn get_with(&self, id: i64, exclusion: &str) -> Result<Option<MessageRow>, EnvelopeError> {
+        let sql = format!("{}{exclusion} AND messages.ROWID = ?", self.select);
         Ok(self
             .rows(&sql, vec![Value::Integer(id)])?
             .into_iter()
@@ -509,14 +519,15 @@ impl Envelope {
     /// Non-deleted rows sharing the message's `conversation_id`, oldest first; just the message
     /// when it has none (or the schema lacks the column); empty if the message is invisible.
     pub fn thread(&self, id: i64, limit: usize) -> Result<Vec<MessageRow>, EnvelopeError> {
-        let Some(m) = self.get(id)? else {
+        let exclusion = self.exclusion()?;
+        let Some(m) = self.get_with(id, &exclusion)? else {
             return Ok(Vec::new());
         };
         let Some(conv) = m.conversation_id else {
             return Ok(vec![m]);
         };
         let sql = format!(
-            "{} AND messages.conversation_id = ? AND {} = 0 \
+            "{}{exclusion} AND messages.conversation_id = ? AND {} = 0 \
              ORDER BY messages.date_received, messages.ROWID LIMIT ?",
             self.select,
             self.or_zero("messages.deleted")
@@ -534,22 +545,23 @@ impl Envelope {
         let stored_unread = self.stored_unread()?;
         let account = account.map(str::to_lowercase);
         let mut out = Vec::new();
-        for (id, url, u) in self.visible_mailboxes()? {
-            if account
-                .as_ref()
-                .is_some_and(|a| !u.identifier.to_lowercase().contains(a))
+        for b in self.scan()? {
+            if b.excluded
+                || account
+                    .as_ref()
+                    .is_some_and(|a| !b.parts.identifier.to_lowercase().contains(a))
             {
                 continue;
             }
-            let (messages, unread) = counts.get(&id).copied().unwrap_or((0, 0));
+            let (messages, unread) = counts.get(&b.id).copied().unwrap_or((0, 0));
             let unread = match &stored_unread {
-                Some(m) => m.get(&id).copied().unwrap_or(0),
+                Some(m) => m.get(&b.id).copied().unwrap_or(0),
                 None => unread,
             };
             out.push(MailboxInfo {
-                name: u.mailbox_name,
-                url,
-                account: u.identifier,
+                name: b.parts.mailbox_name,
+                url: b.url,
+                account: b.parts.identifier,
                 messages,
                 unread,
             });
@@ -559,20 +571,22 @@ impl Envelope {
 
     pub fn accounts(&self) -> Result<Vec<AccountInfo>, EnvelopeError> {
         let counts = self.mailbox_counts()?;
-        self.accounts_with(&counts)
+        Ok(accounts_from(&counts, self.scan()?))
     }
 
     pub fn count(&self) -> Result<Counts, EnvelopeError> {
         let counts = self.mailbox_counts()?;
+        let boxes = self.scan()?;
+        let excluded: HashSet<i64> = boxes.iter().filter(|b| b.excluded).map(|b| b.id).collect();
         let (mut messages, mut excluded_messages) = (0, 0);
         for (id, (n, _)) in &counts {
-            if self.excluded_mailboxes.contains(id) {
+            if excluded.contains(id) {
                 excluded_messages += n;
             } else {
                 messages += n;
             }
         }
-        let accounts = self.accounts_with(&counts)?;
+        let accounts = accounts_from(&counts, boxes);
         Ok(Counts {
             messages,
             mailboxes: accounts.iter().map(|a| a.mailboxes).sum(),
@@ -590,7 +604,7 @@ impl Envelope {
             "SELECT messages.ROWID FROM messages WHERE (messages.flags & 8) != 0 AND {} = 0{} \
              ORDER BY messages.date_received DESC, messages.ROWID DESC LIMIT ?",
             self.or_zero("messages.deleted"),
-            self.not_excluded
+            self.exclusion()?
         );
         let mut stmt = self.conn.prepare(&sql)?;
         let ids = stmt
@@ -750,15 +764,39 @@ impl Envelope {
         DateTime::from_timestamp(secs as i64, nanos).map(|d| d.fixed_offset())
     }
 
-    fn visible_mailboxes(&self) -> rusqlite::Result<Vec<(i64, String, UrlParts)>> {
+    /// The mailboxes as they are now, each judged against the exclude patterns. Read on every
+    /// query, so a mailbox created after open is covered without a restart.
+    fn scan(&self) -> rusqlite::Result<Vec<Mailbox>> {
         Ok(mailbox_urls(&self.conn)?
             .into_iter()
-            .filter(|(id, _)| !self.excluded_mailboxes.contains(id))
             .map(|(id, url)| {
-                let u = parse_mailbox_url(&url);
-                (id, url, u)
+                let parts = parse_mailbox_url(&url);
+                let excluded = is_excluded(&parts, &self.patterns);
+                Mailbox {
+                    id,
+                    url,
+                    parts,
+                    excluded,
+                }
             })
             .collect())
+    }
+
+    /// `" AND messages.mailbox NOT IN (…)"` for the mailboxes excluded now, or empty.
+    fn exclusion(&self) -> rusqlite::Result<String> {
+        if self.patterns.is_empty() {
+            return Ok(String::new());
+        }
+        let ids: Vec<String> = self
+            .scan()?
+            .into_iter()
+            .filter(|b| b.excluded)
+            .map(|b| b.id.to_string())
+            .collect();
+        if ids.is_empty() {
+            return Ok(String::new());
+        }
+        Ok(format!(" AND messages.mailbox NOT IN ({})", ids.join(", ")))
     }
 
     /// Non-deleted `(messages, unread)` per mailbox ROWID, counted from `messages`.
@@ -799,31 +837,37 @@ impl Envelope {
         })?;
         rows.collect::<rusqlite::Result<_>>().map(Some)
     }
+}
 
-    fn accounts_with(
-        &self,
-        counts: &HashMap<i64, (i64, i64)>,
-    ) -> Result<Vec<AccountInfo>, EnvelopeError> {
-        let mut out: Vec<AccountInfo> = Vec::new();
-        for (id, _, u) in self.visible_mailboxes()? {
-            let n = counts.get(&id).map_or(0, |c| c.0);
-            match out.iter_mut().find(|a| a.identifier == u.identifier) {
-                Some(a) => {
-                    a.mailboxes += 1;
-                    a.messages += n;
-                }
-                None => out.push(AccountInfo {
-                    identifier: u.identifier,
-                    user: u.user,
-                    host: u.host,
-                    scheme: u.scheme,
-                    mailboxes: 1,
-                    messages: n,
-                }),
+struct Mailbox {
+    id: i64,
+    url: String,
+    parts: UrlParts,
+    excluded: bool,
+}
+
+/// Visible accounts in first-seen mailbox order, with their mailbox and non-deleted message counts.
+fn accounts_from(counts: &HashMap<i64, (i64, i64)>, boxes: Vec<Mailbox>) -> Vec<AccountInfo> {
+    let mut out: Vec<AccountInfo> = Vec::new();
+    for b in boxes.into_iter().filter(|b| !b.excluded) {
+        let n = counts.get(&b.id).map_or(0, |c| c.0);
+        let u = b.parts;
+        match out.iter_mut().find(|a| a.identifier == u.identifier) {
+            Some(a) => {
+                a.mailboxes += 1;
+                a.messages += n;
             }
+            None => out.push(AccountInfo {
+                identifier: u.identifier,
+                user: u.user,
+                host: u.host,
+                scheme: u.scheme,
+                mailboxes: 1,
+                messages: n,
+            }),
         }
-        Ok(out)
     }
+    out
 }
 
 fn like(expr: &str, pat: &str, p: &mut Vec<Value>) -> String {

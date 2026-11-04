@@ -34,6 +34,7 @@ fn filter(scope: Scope, terms: &[&str]) -> Filter {
         before: None,
         mailbox: None,
         account: None,
+        from: None,
         unread: false,
         flagged: false,
         include_deleted: false,
@@ -503,4 +504,124 @@ fn header_search_under_50ms() {
             rows.len()
         );
     }
+}
+
+#[test]
+fn exclusion_sees_mailbox_added_after_open() {
+    let fx = fixture::build(Epoch::Unix);
+    let all = open(&fx, &[]);
+    let env = open(&fx, &["*@gmail.example"]);
+    // A mailbox of account B and a message in it, created while both are open.
+    mutate(
+        &fx,
+        "INSERT INTO mailboxes (ROWID, url, total_count, unread_count) \
+           VALUES (6, 'imap://excluded%40gmail.example@imap.gmail.example/Later', 1, 1);
+         INSERT INTO subjects (ROWID, subject) VALUES (9000, 'Late arrival');
+         INSERT INTO messages (ROWID, sender, subject, date_received, mailbox, flags, read, flagged, \
+           deleted, conversation_id) \
+           VALUES (5000, 1, 9000, CAST(strftime('%s', 'now') AS INTEGER) - 3600, 6, 8, 0, 0, 0, 5000);",
+    );
+    // The write reached the open readers.
+    assert_eq!(search(&all, Scope::Subject, &["Late arrival"]), vec![5000]);
+    assert_eq!(all.mailboxes(None).unwrap().len(), 6);
+
+    assert!(search(&env, Scope::Subject, &["Late arrival"]).is_empty());
+    assert!(env.get(5000).unwrap().is_none());
+    assert!(!env.newest_encrypted_ids(50).unwrap().contains(&5000));
+    let names: Vec<String> = env
+        .mailboxes(None)
+        .unwrap()
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(names.len(), 4, "{names:?}");
+    assert!(!names.contains(&"Later".to_string()));
+    let c = env.count().unwrap();
+    assert_eq!((c.mailboxes, c.accounts, c.excluded_messages), (4, 1, 5));
+}
+
+#[test]
+fn snapshot_fallback_when_sidecars_unreadable() {
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixture::build(Epoch::Unix);
+    let shm = fx.mail_root.join("V10/MailData/Envelope Index-shm");
+    assert!(shm.exists(), "fixture keeps the -shm sidecar");
+    let mode = std::fs::metadata(&shm).unwrap().permissions().mode();
+    std::fs::set_permissions(&shm, std::fs::Permissions::from_mode(0o000)).unwrap();
+    struct Restore<'a>(&'a std::path::Path, u32);
+    impl Drop for Restore<'_> {
+        fn drop(&mut self) {
+            let _ = std::fs::set_permissions(self.0, std::fs::Permissions::from_mode(self.1));
+        }
+    }
+    let _restore = Restore(&shm, mode);
+    if std::fs::File::open(&shm).is_ok() {
+        eprintln!("skipped: a chmod 000 file is still readable (running as root?)");
+        return;
+    }
+    let env = open(&fx, &[]);
+    assert!(matches!(env.mode, OpenMode::Snapshot(_)), "{:?}", env.mode);
+    let m = env.get(fx.ids.plain).unwrap().unwrap();
+    assert_eq!(m.subject, "Quarterly numbers");
+}
+
+#[test]
+fn exclude_globs_ignore_case_and_empty_components() {
+    let fx = fixture::build(Epoch::Unix);
+    let env = open(&fx, &["*@GMAIL.example"]);
+    assert!(env.get(fx.ids.excluded).unwrap().is_none());
+    assert_eq!(env.accounts().unwrap().len(), 1);
+    drop(env);
+
+    // uuid-form URLs have user "" and host "": `*@*` must not match "" or "@".
+    let opts = Options {
+        url_form: UrlForm::MailboxUuid,
+        ..Options::default()
+    };
+    let fx = fixture::build_with(Epoch::Unix, opts);
+    let env = open(&fx, &["*@*"]);
+    assert_eq!(env.accounts().unwrap().len(), 2);
+    assert!(env.get(fx.ids.excluded).unwrap().is_some());
+    drop(env);
+    let env = open(&fx, &[&fixture::ACCOUNT_B.to_lowercase()]);
+    assert!(env.get(fx.ids.excluded).unwrap().is_none());
+}
+
+#[test]
+fn from_filter_narrows_any_scope() {
+    let fx = fixture::build(Epoch::Unix);
+    let env = open(&fx, &[]);
+    let alice = |rows: &[MessageRow]| {
+        assert!(!rows.is_empty());
+        assert!(
+            rows.iter().all(|r| r.from.address == "alice@example.test"),
+            "{:?}",
+            ids(rows)
+        );
+    };
+    let mut f = filter(Scope::All, &[]);
+    f.from = Some("alice".into());
+    let all = env.search(&f).unwrap();
+    alice(&all);
+    assert!(ids(&all).contains(&fx.ids.plain));
+    let by_scope = search(&env, Scope::From, &["alice"]);
+    assert_eq!(ids(&all), by_scope);
+
+    let mut f = filter(Scope::Body, &["ignored"]);
+    f.from = Some("Alice Example".into()); // the comment
+    let body = env.search(&f).unwrap();
+    alice(&body);
+    assert_eq!(ids(&body), ids(&all));
+
+    // Combined with terms in another scope.
+    let mut f = filter(Scope::Subject, &["kickoff"]);
+    f.from = Some("alice".into());
+    assert_eq!(
+        ids(&env.search(&f).unwrap()),
+        vec![fx.ids.thread[2], fx.ids.thread[0]]
+    );
+    // LIKE-escaped.
+    let mut f = filter(Scope::Body, &[]);
+    f.from = Some("alice_example".into());
+    assert!(env.search(&f).unwrap().is_empty());
 }
