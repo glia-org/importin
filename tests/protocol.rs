@@ -3,7 +3,8 @@
 mod support;
 
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::path::Path;
+use std::process::{Child, ChildStdin, Command, Output, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -448,7 +449,8 @@ fn list_mailboxes_and_accounts_exclude_configured() {
         "{r}"
     );
     let inbox = boxes.iter().find(|b| b["name"] == "INBOX").unwrap();
-    assert_eq!(inbox["messages"], json!(28));
+    let smime = fx.smime.is_some() as i64; // the encrypted and the opaque signed message
+    assert_eq!(inbox["messages"], json!(27 + 2 * smime));
 
     let r = s.ok("list_mailboxes", json!({"account": "gmail"}));
     assert!(r["mailboxes"].as_array().unwrap().is_empty(), "{r}");
@@ -568,6 +570,93 @@ fn stray_stdout_print_goes_to_stderr() {
 }
 
 #[test]
+fn debug_log_names_the_error_variant_not_the_file() {
+    let fx = fixture::build(Epoch::Unix);
+    let id = fx.ids.umlaut_mailbox;
+    let store = importin::store::locate(&fx.mail_root).unwrap();
+    let url = importin::envelope::open(&store, &[], &Default::default())
+        .unwrap()
+        .get(id)
+        .unwrap()
+        .unwrap()
+        .mailbox_url;
+    let located = importin::paths::Locator::new(store)
+        .locate(id, &url)
+        .unwrap()
+        .unwrap();
+    std::fs::remove_file(located.emlx).unwrap();
+
+    let mut s = Server::spawn_with(&fx, &[("IMPORTIN_LOG", "debug")]);
+    s.initialize();
+    let msg = s.err(
+        "attachment_text",
+        json!({"id": fx.ids.plain, "filename": "secret-name.pdf"}),
+    );
+    assert!(
+        msg.contains("secret-name.pdf"),
+        "the tool error names it: {msg}"
+    );
+    let msg = s.err("get_email", json!({"id": id}));
+    assert!(msg.contains("Gesendete"), "the tool error names it: {msg}");
+    let r = s.ok("search", json!({"query": "zehn", "scope": "body"}));
+    assert_eq!(r["skipped"], json!(1), "{r}");
+    let stderr = s.finish();
+    let has = |line: &str| {
+        stderr
+            .lines()
+            .any(|l| l.starts_with("importin: debug: ") && l.ends_with(line))
+    };
+    assert!(has(" ms: Mime"), "{stderr}");
+    assert!(has(" ms: FileMissing"), "{stderr}");
+    assert!(
+        has(&format!("body scan: message {id}: FileMissing")),
+        "{stderr}"
+    );
+    for secret in ["secret-name", "Gesendete", "Objekte"] {
+        assert!(!stderr.contains(secret), "{secret:?} in the log: {stderr}");
+    }
+}
+
+/// An empty config file in the fixture dir (defaults).
+fn empty_config(fx: &Fixture) -> std::path::PathBuf {
+    let path = fx.dir.path().join("empty-config.toml");
+    std::fs::write(&path, "").unwrap();
+    path
+}
+
+/// `importin serve` with stdin closed, run to its exit.
+fn serve_once(fx: &Fixture, mail_root: &Path, config: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_importin"))
+        .arg("serve")
+        .env("IMPORTIN_MAIL_ROOT", mail_root)
+        .env("IMPORTIN_ACCOUNTS_DB", &fx.accounts_db)
+        .env("IMPORTIN_CONFIG", config)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn serve_exits_2_without_a_store_and_1_on_a_missing_named_config() {
+    let fx = fixture::build(Epoch::Unix);
+    let out = serve_once(&fx, &fx.dir.path().join("nowhere"), &empty_config(&fx));
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty());
+
+    let missing = fx.dir.path().join("no-config.toml");
+    let out = serve_once(&fx, &fx.mail_root, &missing);
+    assert_eq!(out.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.starts_with(&format!(
+            "importin: config io error: {}: ",
+            missing.display()
+        )),
+        "{stderr}"
+    );
+}
+
+#[test]
 fn unknown_schema_prints_the_tables_to_stderr() {
     let fx = fixture::build(Epoch::Unix);
     // The fixture's own synthetic index, never Mail's.
@@ -575,15 +664,8 @@ fn unknown_schema_prints_the_tables_to_stderr() {
         .unwrap()
         .execute_batch("ALTER TABLE mailboxes RENAME COLUMN url TO link;")
         .unwrap();
-    let out = Command::new(env!("CARGO_BIN_EXE_importin"))
-        .arg("serve")
-        .env("IMPORTIN_MAIL_ROOT", &fx.mail_root)
-        .env("IMPORTIN_ACCOUNTS_DB", &fx.accounts_db)
-        .env("IMPORTIN_CONFIG", fx.dir.path().join("no-config.toml"))
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(1));
+    let out = serve_once(&fx, &fx.mail_root, &empty_config(&fx));
+    assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty());
     let stderr = String::from_utf8_lossy(&out.stderr);
     let mut lines = stderr.lines();
@@ -617,7 +699,7 @@ fn budgets_release() {
     let fx = fixture::build_with(
         Epoch::Unix,
         fixture::Options {
-            messages: 2000 - 42,
+            messages: 2000 - 43,
             ..Default::default()
         },
     );

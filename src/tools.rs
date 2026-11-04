@@ -1,7 +1,6 @@
 //! The MCP server: six read-only tools over stdio. stdout carries MCP messages only; logs go to
 //! stderr. The blocking reads run on tokio's blocking pool, sharing one `Arc<Context>`.
 
-use std::fmt::Display;
 use std::fs::File;
 use std::os::fd::AsFd;
 use std::sync::Arc;
@@ -313,11 +312,10 @@ impl ServerHandler for Server {
 impl Server {
     /// Runs `f` on the blocking pool: `Ok` becomes pretty JSON plus the same structured content,
     /// `Err` a tool error with its message.
-    async fn run<T, E, F>(&self, tool: &'static str, f: F) -> Result<CallToolResult, ErrorData>
+    async fn run<T, F>(&self, tool: &'static str, f: F) -> Result<CallToolResult, ErrorData>
     where
         T: Serialize + Send + 'static,
-        E: Display + Send + 'static,
-        F: FnOnce(&Context) -> Result<T, E> + Send + 'static,
+        F: FnOnce(&Context) -> Result<T, ReadError> + Send + 'static,
     {
         let ctx = Arc::clone(&self.ctx);
         let start = Instant::now();
@@ -329,7 +327,8 @@ impl Server {
                 success(&value)
             }
             Ok(Err(e)) => {
-                crate::debug!("{tool}: error in {ms} ms: {e}");
+                // The variant only: the message can name a file or a mailbox.
+                crate::debug!("{tool}: error in {ms} ms: {}", e.kind());
                 Ok(error(e.to_string()))
             }
             // The JoinError's text holds the panic payload, which may be message content.
@@ -362,7 +361,7 @@ fn filter(a: SearchArgs) -> Result<Filter, String> {
         None => Scope::All,
         Some(s) => SCOPES
             .iter()
-            .find(|(name, _)| *name == s)
+            .find(|(name, _)| name.eq_ignore_ascii_case(s))
             .map(|(_, scope)| *scope)
             .ok_or_else(|| {
                 let names: Vec<&str> = SCOPES.iter().map(|(name, _)| *name).collect();
@@ -465,6 +464,19 @@ mod tests {
         let t = date("after", "2026-01-01T09:00:00+01:00", &berlin_winter).unwrap();
         assert_eq!(t.to_rfc3339(), "2026-01-01T08:00:00+00:00");
         assert!(date("after", "2026-02-30", &berlin_winter).is_err());
+    }
+
+    #[test]
+    fn scope_matches_in_any_case() {
+        let args = |scope: &str| -> SearchArgs {
+            serde_json::from_value(serde_json::json!({"query": "x", "scope": scope})).unwrap()
+        };
+        assert_eq!(filter(args("CC")).unwrap().scope, Scope::Cc);
+        assert_eq!(
+            filter(args("Participant")).unwrap().scope,
+            Scope::Participant
+        );
+        assert!(filter(args("bodies")).is_err());
     }
 
     #[test]

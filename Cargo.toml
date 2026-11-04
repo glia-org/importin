@@ -36,3 +36,4 @@ zip = "9.3.0"
 lto = "thin"
 codegen-units = 1
 strip = true
+# panic = "abort" would defeat attach::guarded (catch_unwind)

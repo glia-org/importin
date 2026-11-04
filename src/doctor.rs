@@ -76,7 +76,10 @@ pub struct DecryptProbe {
 #[derive(Debug, Default, Serialize)]
 pub struct Timings {
     pub open: Option<u128>,
+    /// `scope: subject`.
     pub search_header: Option<u128>,
+    pub search_all: Option<u128>,
+    pub search_participant: Option<u128>,
     pub get_email: Option<u128>,
 }
 
@@ -283,11 +286,14 @@ fn check_index(ctx: &Context, sample: usize, r: &mut Report) {
         plain = id;
     }
 
-    let start = Instant::now();
-    let header = filter(Scope::Subject, vec!["a".into()], 25);
-    if note(&mut r.errors, "search", read::search(ctx, &header)).is_some() {
-        r.timings_ms.search_header = Some(start.elapsed().as_millis());
-    }
+    let mut timed_search = |scope, what: &str| {
+        let start = Instant::now();
+        let hits = read::search(ctx, &filter(scope, vec!["a".into()], 25));
+        note(&mut r.errors, what, hits).map(|_| start.elapsed().as_millis())
+    };
+    r.timings_ms.search_header = timed_search(Scope::Subject, "search");
+    r.timings_ms.search_all = timed_search(Scope::All, "search all");
+    r.timings_ms.search_participant = timed_search(Scope::Participant, "search participant");
 
     if let Some(id) = plain {
         let start = Instant::now();
@@ -305,8 +311,8 @@ fn check_index(ctx: &Context, sample: usize, r: &mut Report) {
     r.decrypt_probe = Some(decrypt_probe(ctx, encrypted.as_ref(), &mut r.errors));
 }
 
-/// Also returns the newest row neither flagged encrypted in the index nor enveloped: the get_email
-/// timing sample, so that only the probe touches the keychain.
+/// Also returns the newest row neither flagged encrypted in the index nor enveloped nor opaque
+/// signed-data: the get_email timing sample, so that only the probe runs `security`.
 fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck, Option<i64>) {
     let mut paths = PathSample {
         sampled: rows.len(),
@@ -342,7 +348,11 @@ fn sample_files(ctx: &Context, rows: &[MessageRow]) -> (PathSample, FlagCheck, O
             (false, true) => flags.enveloped_flag_clear += 1,
             _ => flags.encrypted_flag_and_type_agree += 1,
         }
-        if plain.is_none() && !Flags(row.flags as u64).encrypted() && !parsed.is_enveloped() {
+        if plain.is_none()
+            && !Flags(row.flags as u64).encrypted()
+            && !parsed.is_enveloped()
+            && parsed.signed_der().is_none()
+        {
             plain = Some(row.id);
         }
     }
@@ -666,6 +676,8 @@ pub fn render(r: &Report, json: bool) -> String {
     for (name, ms) in [
         ("time open", t.open),
         ("time search_header", t.search_header),
+        ("time search_all", t.search_all),
+        ("time search_participant", t.search_participant),
         ("time get_email", t.get_email),
     ] {
         match ms {

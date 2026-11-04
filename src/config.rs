@@ -93,23 +93,25 @@ fn expand(p: &str) -> PathBuf {
     }
 }
 
-/// Load from `$IMPORTIN_CONFIG` or `~/.config/importin/config.toml`; a missing file means defaults.
+/// Load from `$IMPORTIN_CONFIG` or `~/.config/importin/config.toml`.
 pub fn load() -> Result<Config, ConfigError> {
     let env: HashMap<String, String> = std::env::vars().collect();
-    let path = match env.get("IMPORTIN_CONFIG") {
-        Some(p) => expand(p),
-        None => dirs::home_dir()
-            .unwrap_or_default()
-            .join(".config/importin/config.toml"),
-    };
-    read_file(&path, &env)
+    let default = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".config/importin/config.toml");
+    load_from(&env, &default)
 }
 
-fn read_file(path: &Path, env: &HashMap<String, String>) -> Result<Config, ConfigError> {
-    match std::fs::read_to_string(path) {
+/// A missing `default` means defaults; a missing file named by `IMPORTIN_CONFIG` is an error.
+fn load_from(env: &HashMap<String, String>, default: &Path) -> Result<Config, ConfigError> {
+    let (path, named) = match env.get("IMPORTIN_CONFIG") {
+        Some(p) => (expand(p), true),
+        None => (default.to_path_buf(), false),
+    };
+    match std::fs::read_to_string(&path) {
         Ok(text) => parse(&text, env),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => parse("", env),
-        Err(e) => Err(e.into()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !named => parse("", env),
+        Err(e) => Err(std::io::Error::new(e.kind(), format!("{}: {e}", path.display())).into()),
     }
 }
 
@@ -219,6 +221,31 @@ decryptor = \"openssl\"",
         assert!(
             matches!(&r, Err(ConfigError::Invalid(m)) if m == "body_scan_days must be at most 36500")
         );
+    }
+
+    #[test]
+    fn missing_default_file_means_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = load_from(&no_env(), &dir.path().join("config.toml")).unwrap();
+        assert_eq!(c.body_scan_max, 500);
+    }
+
+    #[test]
+    fn missing_named_file_is_an_error() {
+        // Both files missing: the named one decides, and it does not fall back to defaults.
+        let dir = tempfile::tempdir().unwrap();
+        let named = dir.path().join("typo.toml");
+        let env = HashMap::from([("IMPORTIN_CONFIG".to_string(), named.display().to_string())]);
+        match load_from(&env, &dir.path().join("config.toml")) {
+            Err(ConfigError::Io(e)) => {
+                assert_eq!(e.kind(), std::io::ErrorKind::NotFound);
+                assert!(
+                    e.to_string().starts_with(&named.display().to_string()),
+                    "{e}"
+                );
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
     }
 
     #[test]

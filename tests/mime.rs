@@ -79,6 +79,33 @@ fn headers_all_address_lists() {
 }
 
 #[test]
+fn blank_plain_part_falls_back_to_html() {
+    let raw = b"From: a@example.test\nContent-Type: multipart/alternative; boundary=\"alt\"\n\n\
+--alt\nContent-Type: text/plain; charset=utf-8\n\n \t\n\n\
+--alt\nContent-Type: text/html; charset=utf-8\n\n<p>the html sentence</p>\n\
+--alt--\n";
+    let body = mime::parse(raw).unwrap().body(1000, false);
+    assert_eq!(body.source, BodySource::Html);
+    assert_eq!(body.text, "the html sentence");
+
+    // A later plain part that is not blank still wins over HTML.
+    let raw = b"From: a@example.test\nContent-Type: multipart/mixed; boundary=\"mix\"\n\n\
+--mix\nContent-Type: text/plain\n\n\n\
+--mix\nContent-Type: text/html\n\n<p>html</p>\n\
+--mix\nContent-Type: text/plain\n\nsecond plain\n\
+--mix--\n";
+    let body = mime::parse(raw).unwrap().body(1000, false);
+    assert_eq!(body.source, BodySource::Plain);
+    assert_eq!(body.text.trim(), "second plain");
+
+    // Blank plain and no HTML: no body.
+    let raw = b"From: a@example.test\nContent-Type: text/plain\n\n  \n";
+    let body = mime::parse(raw).unwrap().body(1000, false);
+    assert_eq!(body.source, BodySource::None);
+    assert_eq!(body.text, "");
+}
+
+#[test]
 fn headers_threading_fields() {
     let fx = fixture::build(Epoch::Unix);
     let m = load(&fx, fx.ids.thread[2]);

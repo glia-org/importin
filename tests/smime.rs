@@ -187,6 +187,30 @@ fn opaque_signed_inner_is_decoded() {
     assert_eq!(body_text(&u).trim_end(), "the opaque sentence");
 }
 
+/// Signed-data DER over "the signed sentence" whose content was changed afterwards to "The signed
+/// sentence", so the message digest no longer matches.
+fn tampered_signed_der(keys: &SmimeKeys, dir: &Path) -> Vec<u8> {
+    fs::write(
+        dir.join("inner.eml"),
+        "Content-Type: text/plain\n\nthe signed sentence\n",
+    )
+    .unwrap();
+    let (key, cert) = (keys.key.display(), keys.cert.display());
+    openssl(
+        dir,
+        &format!(
+            "cms -sign -nodetach -outform DER -signer {cert} -inkey {key} -in inner.eml -out signed.der"
+        ),
+    );
+    let mut der = fs::read(dir.join("signed.der")).unwrap();
+    let at = der
+        .windows(19)
+        .position(|w| w == b"the signed sentence")
+        .expect("content octets in the DER");
+    der[at] = b'T';
+    der
+}
+
 #[test]
 fn decode_signed_ignores_a_broken_signature() {
     let fx = fixture::build(Epoch::Unix);
@@ -195,29 +219,41 @@ fn decode_signed_ignores_a_broken_signature() {
         return;
     };
     let dir = tempfile::tempdir().unwrap();
-    fs::write(
-        dir.path().join("inner.eml"),
-        "Content-Type: text/plain\n\nthe signed sentence\n",
-    )
-    .unwrap();
-    let (key, cert) = (keys.key.display(), keys.cert.display());
-    openssl(
-        dir.path(),
-        &format!(
-            "cms -sign -nodetach -outform DER -signer {cert} -inkey {key} -in inner.eml -out signed.der"
-        ),
-    );
-    let mut der = fs::read(dir.path().join("signed.der")).unwrap();
-    let at = der
-        .windows(19)
-        .position(|w| w == b"the signed sentence")
-        .expect("content octets in the DER");
-    der[at] = b'T'; // the message digest no longer matches
+    let der = tampered_signed_der(keys, dir.path());
     let out = openssl_with(keys).decode_signed(&der).unwrap();
     assert!(
         String::from_utf8_lossy(&out).contains("The signed sentence"),
         "{out:?}"
     );
+}
+
+#[test]
+fn security_decode_signed_falls_back_to_openssl() {
+    let fx = fixture::build(Epoch::Unix);
+    let Some(keys) = &fx.smime else {
+        eprintln!("skipped: the fixture has no S/MIME keys (no openssl)");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    // Garbage first: `security cms` fails on the two bytes before it reads a certificate or
+    // consults a keychain. The stand-in openssl drops them and runs the real one with the
+    // fallback's arguments on the tampered DER.
+    let mut input = vec![0x30, 0x00];
+    input.extend(tampered_signed_der(keys, dir.path()));
+    let d = SecurityCms {
+        timeout: TIMEOUT,
+        openssl_bin: script(dir.path(), "tail -c +3 | exec openssl \"$@\""),
+    };
+    let out = d.decode_signed(&input).unwrap();
+    assert!(
+        String::from_utf8_lossy(&out).contains("The signed sentence"),
+        "{out:?}"
+    );
+    // Decryption has no fallback: the security error stands.
+    assert!(matches!(
+        d.decrypt(&input),
+        Err(DecryptError::Failed { .. })
+    ));
 }
 
 #[test]
@@ -298,7 +334,10 @@ fn large_input_and_output_do_not_deadlock() {
 #[test]
 fn security_cms_spawns() {
     // Garbage DER fails in the decoder before any keychain is consulted.
-    let d = SecurityCms { timeout: TIMEOUT };
+    let d = SecurityCms {
+        timeout: TIMEOUT,
+        openssl_bin: "openssl".into(),
+    };
     assert_eq!(d.name(), "security");
     match d.decrypt(&[0x30, 0x00]) {
         Err(DecryptError::Failed { status, stderr }) => {

@@ -4,7 +4,7 @@
 
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -43,6 +43,9 @@ pub trait Decryptor: Send + Sync {
 /// `/usr/bin/security cms -D`, with the identities of the keychain search list.
 pub struct SecurityCms {
     pub timeout: Duration,
+    /// `openssl` for signed-data that `security cms` refuses: it fails on a signature it cannot
+    /// verify, and the content is wanted all the same.
+    pub openssl_bin: PathBuf,
 }
 
 impl SecurityCms {
@@ -66,8 +69,14 @@ impl Decryptor for SecurityCms {
     fn decrypt(&self, der: &[u8]) -> Result<Vec<u8>, DecryptError> {
         self.decode(der)
     }
+    /// `security cms -D`, else, when it fails, `openssl cms` without verification.
     fn decode_signed(&self, der: &[u8]) -> Result<Vec<u8>, DecryptError> {
-        self.decode(der)
+        match self.decode(der) {
+            Err(DecryptError::Failed { .. }) => {
+                openssl_decode_signed(&self.openssl_bin, der, self.timeout)
+            }
+            other => other,
+        }
     }
     fn name(&self) -> &'static str {
         "security"
@@ -92,19 +101,31 @@ impl Decryptor for OpensslCli {
         run(cmd, der, self.timeout)
     }
     fn decode_signed(&self, der: &[u8]) -> Result<Vec<u8>, DecryptError> {
-        let mut cmd = Command::new(&self.bin);
-        // -nosigs: content comes back even when the signature would not verify.
-        cmd.args(["cms", "-verify", "-noverify", "-nosigs", "-inform", "DER"]);
-        run(cmd, der, self.timeout)
+        openssl_decode_signed(&self.bin, der, self.timeout)
     }
     fn name(&self) -> &'static str {
         "openssl"
     }
 }
 
+/// `openssl cms -verify -noverify -nosigs`: the content of signed-data, signature unchecked.
+fn openssl_decode_signed(
+    bin: &Path,
+    der: &[u8],
+    timeout: Duration,
+) -> Result<Vec<u8>, DecryptError> {
+    let mut cmd = Command::new(bin);
+    // -nosigs: content comes back even when the signature would not verify.
+    cmd.args(["cms", "-verify", "-noverify", "-nosigs", "-inform", "DER"]);
+    run(cmd, der, timeout)
+}
+
 pub fn from_config(cfg: &SmimeConfig) -> Box<dyn Decryptor> {
     match cfg.decryptor {
-        DecryptorKind::Security => Box::new(SecurityCms { timeout: TIMEOUT }),
+        DecryptorKind::Security => Box::new(SecurityCms {
+            timeout: TIMEOUT,
+            openssl_bin: cfg.openssl_bin.clone(),
+        }),
         DecryptorKind::Openssl => Box::new(OpensslCli {
             bin: cfg.openssl_bin.clone(),
             key: cfg
@@ -171,6 +192,20 @@ pub fn unwrap(parsed: &mime::Parsed<'_>, d: &dyn Decryptor) -> Result<Unwrapped,
         signed: false,
         layers: vec!["enveloped"],
     })
+}
+
+/// The content of an opaque signed-only message (a top-level pkcs7-mime signed-data, not
+/// encrypted); `None` for any other message.
+pub fn unwrap_signed(
+    parsed: &mime::Parsed<'_>,
+    d: &dyn Decryptor,
+) -> Option<Result<Unwrapped, DecryptError>> {
+    let der = parsed.signed_der()?;
+    Some(d.decode_signed(&der).map(|inner| Unwrapped {
+        inner,
+        signed: true,
+        layers: vec!["signed-data"],
+    }))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

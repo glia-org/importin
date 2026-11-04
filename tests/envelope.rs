@@ -363,6 +363,8 @@ fn mailboxes_counts_and_unread() {
     let fx = fixture::build(Epoch::Unix);
     let env = open(&fx, &[]);
     let enc = fx.ids.encrypted.is_some() as i64;
+    // The opaque signed message is read.
+    let opq = fx.ids.opaque_signed.is_some() as i64;
     let mbs = env.mailboxes(None).unwrap();
     assert_eq!(mbs.len(), 5);
     let find = |name: &str, account: &str| {
@@ -372,12 +374,12 @@ fn mailboxes_counts_and_unread() {
     };
     let a = "paul@example.test";
     let inbox = find("INBOX", a);
-    assert_eq!((inbox.messages, inbox.unread), (27 + enc, 18 + enc));
+    assert_eq!((inbox.messages, inbox.unread), (27 + enc + opq, 18 + enc));
     let sent = find("Sent Messages", a);
     assert_eq!((sent.messages, sent.unread), (3, 0));
-    let gesendet = find("Gesendete Objekte", a);
+    let gesendet = find("Gesendete Objekte \u{c4}", a);
     assert_eq!((gesendet.messages, gesendet.unread), (2, 0));
-    assert!(gesendet.url.ends_with("/Gesendete%20Objekte"));
+    assert!(gesendet.url.ends_with("/Gesendete%20Objekte%20%C3%84"));
     let archive = find("Archive/2025", a);
     assert_eq!((archive.messages, archive.unread), (4, 0));
     let b = find("INBOX", "excluded@gmail.example");
@@ -388,11 +390,11 @@ fn mailboxes_counts_and_unread() {
     assert_eq!(only_b[0].account, "excluded@gmail.example");
 
     let c = env.count().unwrap();
-    assert_eq!(c.messages, 40 + enc);
+    assert_eq!(c.messages, 40 + enc + opq);
     assert_eq!((c.mailboxes, c.accounts, c.excluded_messages), (5, 2, 0));
     let accounts = env.accounts().unwrap();
     let pa = accounts.iter().find(|x| x.identifier == a).unwrap();
-    assert_eq!((pa.mailboxes, pa.messages), (4, 36 + enc));
+    assert_eq!((pa.mailboxes, pa.messages), (4, 36 + enc + opq));
 }
 
 #[test]
@@ -471,7 +473,7 @@ fn parse_mailbox_url_both_forms() {
     let fx = fixture::build_with(Epoch::Unix, opts);
     let env = open(&fx, &[]);
     let m = env.get(fx.ids.umlaut_mailbox).unwrap().unwrap();
-    assert_eq!(m.mailbox, "Gesendete Objekte");
+    assert_eq!(m.mailbox, "Gesendete Objekte \u{c4}");
     assert_eq!(m.account, fixture::ACCOUNT_A);
     assert!(m.mailbox_url.starts_with("mailbox://"));
 }

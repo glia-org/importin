@@ -136,7 +136,7 @@ fn umlaut_mailbox_dir_found() {
         let fx = with_form(form);
         let id = fx.ids.umlaut_mailbox;
         let u = url(&fx, id);
-        assert!(u.ends_with("/Gesendete%20Objekte"), "{u}");
+        assert!(u.ends_with("/Gesendete%20Objekte%20%C3%84"), "{u}");
         let loc = Locator::new(store_of(&fx));
         let l = locate(&loc, id, &u);
         assert_eq!(l.by, Resolution::Formula, "{form:?}");
@@ -144,8 +144,18 @@ fn umlaut_mailbox_dir_found() {
             .mail_root
             .join("V10")
             .join(ACCOUNT_A)
-            .join("Gesendete Objekte.mbox");
+            .join("Gesendete Objekte \u{c4}.mbox");
+        // The directory on disk is NFD; the path built from the URL is NFC.
         assert!(l.emlx.starts_with(&mbox), "{:?}", l.emlx);
+        assert!(l.emlx.is_file());
+        let on_disk: Vec<String> = fs::read_dir(fx.mail_root.join("V10").join(ACCOUNT_A))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        assert!(
+            on_disk.contains(&"Gesendete Objekte A\u{308}.mbox".to_string()),
+            "{on_disk:?}"
+        );
     }
 }
 

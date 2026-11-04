@@ -8,10 +8,12 @@
 //! `…/Data/<shard>/Attachments/<ROWID>/<part>/<filename>`). Each mailbox's own `.mbox` dir also
 //! holds a decoy `Info.plist`. S/MIME key and cert live in `<dir>/smime/`.
 //!
-//! Mailboxes (ROWID: URL path, account): 1 `INBOX`, 2 `Sent Messages`, 3 `Gesendete Objekte`,
+//! Mailboxes (ROWID: URL path, account): 1 `INBOX`, 2 `Sent Messages`, 3 `Gesendete Objekte Ä`,
 //! 4 `Archive/2025` (account A `paul@example.test`, host `mail.example.test`, dir `ACCOUNT_A`),
 //! 5 `INBOX` (account B `excluded@gmail.example`, host `imap.gmail.example`, dir `ACCOUNT_B`).
-//! `total_count`/`unread_count` count non-deleted rows.
+//! `total_count`/`unread_count` count non-deleted rows. Mailbox names are NFC in the URL and NFD in
+//! the directory name (`Ä` = `A` + U+0308 on disk); APFS, being normalization-insensitive, maps one
+//! to the other.
 //!
 //! Accounts database: `Fixture::accounts_db` = `<dir>/Accounts/Accounts4.sqlite`, Core Data shaped
 //! (`Z_PK`, `Z_ENT`, `Z_OPT` on both tables): `ZACCOUNT(ZIDENTIFIER, ZUSERNAME, ZACCOUNTDESCRIPTION,
@@ -41,12 +43,13 @@
 //! | rfc822_nested | 108 | INBOX | `Fwd: ` prefix; multipart/mixed: 1 text, 2 message/rfc822 `original.eml` whose body is multipart/alternative (2.1 plain, 2.2 html) |
 //! | signed_only | 109 | INBOX | multipart/signed: 1 text "I hereby sign this statement.", 2 fake `smime.p7s`; flag bit 23 |
 //! | encrypted | 110 | INBOX | `None` without openssl. enveloped-data (aes256) over multipart/signed over multipart/mixed: 1 multipart/alternative "the sealed sentence", 2 inline attachment `sealed.txt` "sealed attachment text"; subject "sealed", from probe@example.test; flag bit 3; no summary |
+//! | opaque_signed | 138 | INBOX | `None` without openssl. Unencrypted pkcs7-mime signed-data `smime.p7m` (`openssl cms -sign -nodetach`) over multipart/mixed: 1 text "the opaque sentence", 2 inline attachment `opaque.txt` "opaque attachment text"; subject "opaque", from probe@example.test; read; flag bit 23; no summary |
 //! | deleted | 111 | INBOX | `deleted = 1`, flag bit 1 |
 //! | thread | 112, 113, 114 | INBOX, Sent Messages, INBOX | "Project kickoff", `Re: ` on 113 and 114, `conversation_id = 7`, oldest first, In-Reply-To/References chain |
 //! | cc_target | 115 | INBOX | To Paul Example <paul@example.test>, Bob Example <bob@example.test>; Cc Carol Example <carol@example.test>; Bcc Dave Example <dave@example.test>; Carol and Dave appear in no other message |
 //! | bcc_target | 116 | INBOX | To team@example.test (comment NULL), Bcc Paul |
 //! | excluded | 117 | B INBOX | account B; B INBOX holds 117 and 129–131 |
-//! | umlaut_mailbox | 118 | Gesendete Objekte | URL path `Gesendete%20Objekte`, dir `Gesendete Objekte.mbox`; To "Jörg Müller" (RFC 2047 in the header) |
+//! | umlaut_mailbox | 118 | Gesendete Objekte Ä | URL path `Gesendete%20Objekte%20%C3%84` (NFC), dir `Gesendete Objekte Ä.mbox` (NFD); To "Jörg Müller" (RFC 2047 in the header) |
 //! | old_unique | 119 | INBOX | dated base − 200 days; body word "zymurgy" (in no other message) |
 //! | big_rowid | 1_234_567 | INBOX | shard `4/3/2/1`; with `Options::huge_emlx` its emlx is a 65 MiB file (sparse, zero-padded) |
 //! | with_pdf | 2001 | INBOX | inline base64 `a.pdf` (one page, Helvetica, "pdf sentence"); shard `2` |
@@ -58,9 +61,9 @@
 //! nocomment@example.test (comment NULL) and a To row with address NULL, comment "Undisclosed
 //! recipients"; 123–126 `Archive/2025`, 40 days old; 127–128 Sent Messages; 129–131 B INBOX, unread;
 //! 132 flagged + unread, 133 unread, 134 flagged, 135–136 read (INBOX); 137 `Re: ` in Gesendete
-//! Objekte. Unread non-deleted rows: 102, 105–110, 114–117, 120–122, 129–133, 2001, 2002, 2004,
-//! 12_345. Counts (no fillers, with `encrypted`): 42 messages; INBOX 28 total / 19 unread (the
-//! deleted 111 not counted), Sent 3/0, Gesendete 2/0, Archive 4/0, B INBOX 4/4.
+//! Objekte Ä. Unread non-deleted rows: 102, 105–110, 114–117, 120–122, 129–133, 2001, 2002, 2004,
+//! 12_345. Counts (no fillers, with `encrypted` and `opaque_signed`): 43 messages; INBOX 29 total /
+//! 19 unread (the deleted 111 not counted), Sent 3/0, Gesendete 2/0, Archive 4/0, B INBOX 4/4.
 //! `Options::messages` adds plain read fillers from ROWID 100_000 in INBOX, subjects
 //! "Filler message 0000"…, 7 days old and one minute older each.
 
@@ -131,6 +134,7 @@ pub struct Ids {
     pub rfc822_nested: i64,
     pub signed_only: i64,
     pub encrypted: Option<i64>,
+    pub opaque_signed: Option<i64>,
     pub deleted: i64,
     pub thread: [i64; 3],
     pub cc_target: i64,
@@ -179,7 +183,7 @@ const MAILBOXES: [Mbx; 5] = [
     a_box(&["INBOX"], "0E1D2C3B-4A59-4687-9786-A5B4C3D2E1F0"),
     a_box(&["Sent Messages"], "1A2B3C4D-5E6F-4071-8293-A4B5C6D7E8F9"),
     a_box(
-        &["Gesendete Objekte"],
+        &["Gesendete Objekte \u{c4}"],
         "2B3C4D5E-6F70-4182-93A4-B5C6D7E8F9A0",
     ),
     a_box(&["Archive", "2025"], "3C4D5E6F-7081-4293-A4B5-C6D7E8F9A0B1"),
@@ -419,6 +423,7 @@ pub fn build_with(epoch: Epoch, opts: Options) -> Fixture {
             rfc822_nested: 108,
             signed_only: 109,
             encrypted: smime.as_ref().map(|_| 110),
+            opaque_signed: smime.as_ref().map(|_| 138),
             deleted: 111,
             thread: [112, 113, 114],
             cc_target: 115,
@@ -439,7 +444,7 @@ pub fn build_with(epoch: Epoch, opts: Options) -> Fixture {
 
 /// One row per message; the table at the top of this file says what each one is for.
 #[rustfmt::skip]
-fn messages(encrypted_raw: Option<Vec<u8>>) -> Vec<Msg> {
+fn messages(smime_raw: Option<SmimeRaw>) -> Vec<Msg> {
     let newsletter = html("<html><head><style>p { color: red; }</style></head><body>\
         <p>First paragraph of the newsletter.</p><p>Second paragraph &amp; more.</p></body></html>") + "\n";
     let latin1 = "Content-Type: text/plain; charset=iso-8859-1\nContent-Transfer-Encoding: quoted-printable\n\n\
@@ -542,8 +547,9 @@ fn messages(encrypted_raw: Option<Vec<u8>>) -> Vec<Msg> {
         ]);
         v.push(Msg { bits: att(1), ..m(rowid, INBOX, BOB, &[PAUL], subject, 98 + 3 * i as i64, content) });
     }
-    if let Some(enc) = encrypted_raw {
-        v.push(Msg { bits: ENCRYPTED, raw: Some(enc), ..m(110, INBOX, PROBE, &[PAUL], "sealed", 29, String::new()) });
+    if let Some(SmimeRaw { encrypted, opaque }) = smime_raw {
+        v.push(Msg { bits: ENCRYPTED, raw: Some(encrypted), ..m(110, INBOX, PROBE, &[PAUL], "sealed", 29, String::new()) });
+        v.push(Msg { read: true, bits: SIGNED, raw: Some(opaque), ..m(138, INBOX, PROBE, &[PAUL], "opaque", 110, String::new()) });
     }
     v
 }
@@ -746,10 +752,11 @@ fn pct(s: &str) -> String {
         .collect()
 }
 
+/// Written in NFD (`Ä` decomposed), while the URL carries the NFC name.
 fn mbox_dir(v10: &Path, mbx: &Mbx) -> PathBuf {
     let mut p = v10.join(mbx.account);
     for seg in mbx.path {
-        p.push(format!("{seg}.mbox"));
+        p.push(format!("{}.mbox", seg.replace('\u{c4}', "A\u{308}")));
     }
     p
 }
@@ -1010,8 +1017,23 @@ const INNER: &str = "Content-Type: multipart/mixed; boundary=\"sealed-mix\"\n\n\
 Content-Disposition: attachment; filename=\"sealed.txt\"\n\nsealed attachment text\n\
 --sealed-mix--\n";
 
-/// Throwaway key and cert plus an enveloped(signed(INNER)) RFC 822 message, all made by `openssl`.
-fn make_smime(dir: &Path) -> Result<(SmimeKeys, Vec<u8>), String> {
+const OPAQUE_INNER: &str = "Content-Type: multipart/mixed; boundary=\"opaque-mix\"\n\n\
+--opaque-mix\nContent-Type: text/plain; charset=utf-8\n\nthe opaque sentence\n\
+--opaque-mix\nContent-Type: text/plain; charset=utf-8; name=\"opaque.txt\"\n\
+Content-Disposition: attachment; filename=\"opaque.txt\"\n\nopaque attachment text\n\
+--opaque-mix--\n";
+
+/// The two messages `openssl` writes, headers included.
+#[derive(Clone)]
+struct SmimeRaw {
+    /// enveloped(signed(INNER))
+    encrypted: Vec<u8>,
+    /// opaque signed-data over OPAQUE_INNER, not encrypted
+    opaque: Vec<u8>,
+}
+
+/// Throwaway key and cert plus the S/MIME messages, all made by `openssl`.
+fn make_smime(dir: &Path) -> Result<(SmimeKeys, SmimeRaw), String> {
     let d = dir.join("smime");
     fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     // No argument contains a space, so each command line is split on whitespace.
@@ -1038,10 +1060,19 @@ fn make_smime(dir: &Path) -> Result<(SmimeKeys, Vec<u8>), String> {
         "cms -encrypt -aes256 -recip cert.pem -in signed.eml -from probe@example.test \
          -to paul@example.test -subject sealed -out enc.eml",
     )?;
-    let enc = fs::read(d.join("enc.eml")).map_err(|e| e.to_string())?;
+    fs::write(d.join("opaque-inner.eml"), OPAQUE_INNER).map_err(|e| e.to_string())?;
+    run(
+        "cms -sign -nodetach -signer cert.pem -inkey key.pem -in opaque-inner.eml \
+         -from probe@example.test -to paul@example.test -subject opaque -out opaque.eml",
+    )?;
+    let read = |name: &str| fs::read(d.join(name)).map_err(|e| e.to_string());
     let keys = SmimeKeys {
         key: d.join("key.pem"),
         cert: d.join("cert.pem"),
     };
-    Ok((keys, enc))
+    let raw = SmimeRaw {
+        encrypted: read("enc.eml")?,
+        opaque: read("opaque.eml")?,
+    };
+    Ok((keys, raw))
 }

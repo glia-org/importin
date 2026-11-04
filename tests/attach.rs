@@ -141,6 +141,40 @@ fn malformed_documents_give_notes() {
     }
 }
 
+const TOO_LARGE: &str = "attachment inflates past the 64 MiB limit";
+const MIB_64: usize = 64 * 1024 * 1024;
+
+#[test]
+fn workbook_declaring_more_than_64_mib_is_refused() {
+    // The central directory claims ~1.75 GiB for one entry; nothing is inflated.
+    let mut xlsx = fixture::xlsx();
+    let central = xlsx
+        .windows(4)
+        .position(|w| w == b"PK\x01\x02")
+        .expect("a central directory entry");
+    xlsx[central + 24..central + 28].copy_from_slice(&0x7000_0000u32.to_le_bytes());
+    let e = attach::extract(&xlsx, "a.xlsx", XLSX, 20_000);
+    assert_eq!(e.text, "");
+    assert_eq!(e.note.as_deref(), Some(TOO_LARGE));
+}
+
+#[test]
+fn docx_part_inflating_past_64_mib_is_refused() {
+    let body = format!(
+        "<w:document><w:body><w:p><w:r><w:t>{}</w:t></w:r></w:p></w:body></w:document>",
+        "a".repeat(MIB_64)
+    );
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let stored =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    w.start_file("word/document.xml", stored).unwrap();
+    std::io::Write::write_all(&mut w, body.as_bytes()).unwrap();
+    let docx = w.finish().unwrap().into_inner();
+    let e = attach::extract(&docx, "big.docx", DOCX, 20_000);
+    assert!(e.text.is_empty(), "{} chars of text", e.text.len());
+    assert_eq!(e.note.as_deref(), Some(TOO_LARGE));
+}
+
 #[test]
 fn read_attachment_text_end_to_end() {
     let fx = fixture::build(Epoch::Unix);

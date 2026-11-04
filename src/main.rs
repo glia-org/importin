@@ -17,7 +17,8 @@ fn main() -> ExitCode {
                 if let Some(dump) = schema_dump(&e) {
                     eprintln!("{dump}");
                 }
-                ExitCode::from(1)
+                // 2 when the store will not open, as `doctor` exits; 1 for anything else.
+                ExitCode::from(if e.is::<OpenError>() { 2 } else { 1 })
             }
         },
         Some("--version") if args.len() == 1 => {

@@ -11,7 +11,11 @@ use quick_xml::events::Event;
 use serde::Serialize;
 use zip::ZipArchive;
 
+use crate::emlx::MAX_EMLX_BYTES;
 use crate::mime::{self, AttachmentState};
+
+/// The note for a zip that inflates, or declares it inflates, past `MAX_EMLX_BYTES`.
+const TOO_LARGE: &str = "attachment inflates past the 64 MiB limit";
 
 /// No `Debug`: the text may come from a decrypted message.
 #[derive(Serialize)]
@@ -92,13 +96,15 @@ fn kind(filename: &str, mime_type: &str) -> Kind {
     }
 }
 
-/// An error or a panic in a parser becomes empty text and the note "<kind> extraction failed: …".
+/// An error or a panic in a parser becomes empty text and the note "<kind> extraction failed: …";
+/// [`TOO_LARGE`] is the note as it stands.
 fn guarded(
     kind: &str,
     f: impl FnOnce() -> Result<String, String> + UnwindSafe,
 ) -> (String, Option<String>) {
     let why = match panic::catch_unwind(f) {
         Ok(Ok(text)) => return (text, None),
+        Ok(Err(why)) if why == TOO_LARGE => return (String::new(), Some(why)),
         Ok(Err(why)) => why,
         Err(payload) => payload
             .downcast_ref::<&str>()
@@ -121,6 +127,19 @@ fn docx(bytes: &[u8]) -> Result<String, String> {
 
 /// `== <sheet>`, then one line per row, cells tab-separated.
 fn sheets(bytes: &[u8]) -> Result<String, String> {
+    // calamine inflates the parts itself; zip refuses to inflate an entry past its declared size,
+    // so the declared sizes of a zip workbook (xlsx, xlsb, ods) bound what calamine reads. xls is
+    // not a zip.
+    if let Ok(zip) = ZipArchive::new(Cursor::new(bytes)) {
+        let mut declared: u64 = 0;
+        for i in 0..zip.len() {
+            let size = zip.by_index_data(i).map_err(|e| e.to_string())?.size();
+            declared = declared.saturating_add(size);
+        }
+        if declared > MAX_EMLX_BYTES {
+            return Err(TOO_LARGE.into());
+        }
+    }
     let mut book =
         calamine::open_workbook_auto_from_rs(Cursor::new(bytes)).map_err(|e| e.to_string())?;
     let mut out = String::new();
@@ -160,13 +179,18 @@ fn pptx(bytes: &[u8]) -> Result<String, String> {
     Ok(out)
 }
 
+/// The entry as text, inflated to at most `MAX_EMLX_BYTES`.
 fn entry(zip: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<String, String> {
-    let mut xml = String::new();
+    let mut xml = Vec::new();
     zip.by_name(name)
         .map_err(|e| format!("{name}: {e}"))?
-        .read_to_string(&mut xml)
+        .take(MAX_EMLX_BYTES + 1)
+        .read_to_end(&mut xml)
         .map_err(|e| format!("{name}: {e}"))?;
-    Ok(xml)
+    if xml.len() as u64 > MAX_EMLX_BYTES {
+        return Err(TOO_LARGE.into());
+    }
+    String::from_utf8(xml).map_err(|e| format!("{name}: {e}"))
 }
 
 /// The text inside `text` elements, a newline at each `</para>`.

@@ -10,10 +10,12 @@ use importin::config::{self, Config, DecryptorKind};
 use importin::envelope::{self, Filter, Scope};
 use importin::paths::Locator;
 use importin::read::{self, Context, Email, ReadError, SearchResult};
+use importin::smime::EncryptionInfo;
 use importin::store;
 use support::fixture::{self, Epoch, Fixture, Options, UrlForm};
 
-const HINT: &str = "narrow with after:, from: or mailbox:";
+const NARROW: &str = "narrow with after:, from: or mailbox:";
+const MORE: &str = "more hits may exist; raise limit or use offset";
 
 fn config(fx: &Fixture) -> Config {
     let env = HashMap::from([
@@ -180,6 +182,51 @@ fn get_email_encrypted_openssl() {
 }
 
 #[test]
+fn get_email_opaque_signed_shows_the_signed_content() {
+    let fx = fixture::build(Epoch::Unix);
+    let (Some(keys), Some(id)) = (&fx.smime, fx.ids.opaque_signed) else {
+        eprintln!("skipped: the fixture has no S/MIME message (no openssl)");
+        return;
+    };
+    // The openssl decryptor, so that no test runs `security`; signed-data needs no key.
+    let c = read::open(with_openssl(config(&fx), &keys.key, &keys.cert)).unwrap();
+    let e = email(&c, id);
+    assert_eq!(e.subject, "opaque");
+    assert_eq!(e.body.trim_end(), "the opaque sentence");
+    assert_eq!(e.body_source, "plain");
+    assert_eq!(
+        e.encryption,
+        EncryptionInfo {
+            encrypted: false,
+            decrypted: false,
+            method: None,
+            signed: true,
+            signature: "not verified".into(),
+            error: None,
+        }
+    );
+    let names: Vec<&str> = e.attachments.iter().map(|a| a.filename.as_str()).collect();
+    assert_eq!(names, ["opaque.txt"], "smime.p7m is hidden");
+    let t = read::attachment_text(&c, id, Some("opaque.txt"), None, 20_000).unwrap();
+    assert_eq!(t.text.trim_end(), "opaque attachment text");
+
+    // A decoder that fails: the outer message as it is, and the error.
+    let mut cfg = with_openssl(config(&fx), &keys.key, &keys.cert);
+    cfg.smime.openssl_bin = "/usr/bin/false".into();
+    let c = read::open(cfg).unwrap();
+    let e = email(&c, id);
+    assert_eq!((e.body.as_str(), e.body_source), ("", "none"));
+    assert!(e.encryption.signed && !e.encryption.encrypted && !e.encryption.decrypted);
+    assert_eq!(e.encryption.signature, "not verified");
+    let error = e.encryption.error.expect("the decoder's error");
+    assert!(error.contains("exit status 1"), "{error}");
+    let names: Vec<&str> = e.attachments.iter().map(|a| a.filename.as_str()).collect();
+    assert_eq!(names, ["smime.p7m"]);
+    let t = read::attachment_text(&c, id, None, Some(0), 20_000).unwrap();
+    assert_eq!(t.filename, "smime.p7m");
+}
+
+#[test]
 fn get_email_encrypted_failure_keeps_headers() {
     let fx = fixture::build(Epoch::Unix);
     let Some(id) = fx.ids.encrypted else {
@@ -275,7 +322,7 @@ fn search_body_cap_marks_truncated() {
     assert_eq!(r.candidates_total, Some(3));
     assert_eq!(r.scanned, Some(3));
     assert!(r.truncated);
-    assert_eq!(r.hint.as_deref(), Some(HINT));
+    assert_eq!(r.hint.as_deref(), Some(NARROW));
 }
 
 #[test]
@@ -297,7 +344,7 @@ fn search_body_limit_and_offset() {
     let r = read::search(&c, &f).unwrap();
     assert_eq!(ids(&r), all[1..3]);
     assert!(r.truncated, "stopped before the last candidate");
-    assert_eq!(r.hint.as_deref(), Some(HINT));
+    assert_eq!(r.hint.as_deref(), Some(MORE));
     assert!(r.scanned.unwrap() < r.candidates_total.unwrap());
 }
 

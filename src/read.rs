@@ -18,7 +18,10 @@ use crate::paths::{Locator, PathError};
 use crate::smime::{self, DecryptError, Decryptor, EncryptionInfo, Unwrapped};
 use crate::store::{self, StoreError};
 
-const HINT: &str = "narrow with after:, from: or mailbox:";
+/// The body scan reached `body_scan_max` candidates.
+const NARROW: &str = "narrow with after:, from: or mailbox:";
+/// The body scan stopped at `limit` hits.
+const MORE: &str = "more hits may exist; raise limit or use offset";
 
 /// `Send + Sync`, so one `Arc<Context>` serves concurrent requests.
 pub struct Context {
@@ -112,6 +115,23 @@ pub enum ReadError {
     Decrypt(#[from] DecryptError),
 }
 
+impl ReadError {
+    /// The variant's name, for logs: the message can name a file or a mailbox.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::NotFound(_) => "NotFound",
+            Self::FileMissing { .. } => "FileMissing",
+            Self::Emlx(_) => "Emlx",
+            Self::Mime(_) => "Mime",
+            Self::Path(_) => "Path",
+            Self::Envelope(_) => "Envelope",
+            Self::NotDownloaded { .. } => "NotDownloaded",
+            Self::NotExtractable { .. } => "NotExtractable",
+            Self::Decrypt(_) => "Decrypt",
+        }
+    }
+}
+
 /// The index row as a search hit shows it.
 #[derive(Debug, Clone, Serialize)]
 pub struct HitRow {
@@ -163,24 +183,34 @@ pub fn get_email(ctx: &Context, id: i64, max_chars: usize, html: bool) -> Result
     let headers = outer.headers();
     let dir = Some(attachments_dir.as_path());
     let method = ctx.decryptor.name();
+    let enveloped = outer.is_enveloped();
+    let signed_only = EncryptionInfo {
+        signed: true,
+        signature: "not verified".into(),
+        ..EncryptionInfo::none()
+    };
 
     let (body, attachments, encryption) = match unwrapped {
         Some(Ok(unwrapped)) => {
             let inner = mime::parse(&unwrapped.inner)?;
-            let encryption = EncryptionInfo {
-                encrypted: true,
-                decrypted: true,
-                method: Some(method.into()),
-                signed: unwrapped.signed,
-                signature: if unwrapped.signed {
-                    "not verified"
-                } else {
-                    "none"
+            let encryption = if enveloped {
+                EncryptionInfo {
+                    encrypted: true,
+                    decrypted: true,
+                    method: Some(method.into()),
+                    signed: unwrapped.signed,
+                    signature: if unwrapped.signed {
+                        "not verified"
+                    } else {
+                        "none"
+                    }
+                    .into(),
+                    error: None,
                 }
-                .into(),
-                error: None,
+            } else {
+                signed_only
             };
-            // The parts of the decrypted entity are inline; the Attachments dir belongs to
+            // The parts of the unwrapped entity are inline; the Attachments dir belongs to
             // the outer message's part numbers.
             (
                 inner.body(max_chars, html),
@@ -188,6 +218,15 @@ pub fn get_email(ctx: &Context, id: i64, max_chars: usize, html: bool) -> Result
                 encryption,
             )
         }
+        // Opaque signed-data that did not decode: the outer message as it is, and the error.
+        Some(Err(err)) if !enveloped => (
+            outer.body(max_chars, html),
+            outer.attachments(dir),
+            EncryptionInfo {
+                error: Some(err.to_string()),
+                ..signed_only
+            },
+        ),
         Some(Err(err)) => {
             let attachments = outer
                 .attachments(dir)
@@ -204,11 +243,7 @@ pub fn get_email(ctx: &Context, id: i64, max_chars: usize, html: bool) -> Result
         }
         None => {
             let encryption = if outer.is_signed() {
-                EncryptionInfo {
-                    signed: true,
-                    signature: "not verified".into(),
-                    ..EncryptionInfo::none()
-                }
+                signed_only
             } else {
                 EncryptionInfo::none()
             };
@@ -251,8 +286,9 @@ pub fn get_email(ctx: &Context, id: i64, max_chars: usize, html: bool) -> Result
 }
 
 /// The text of one attachment, chosen by exact `filename`, else by `index` (a position in the list
-/// `get_email` returns). The message loads as in `get_email`; an enveloped message's attachments
-/// come from its decrypted entity, and a decryption failure is an error.
+/// `get_email` returns). The message loads as in `get_email`; an enveloped or opaque signed
+/// message's attachments come from its unwrapped entity. A decryption failure is an error; signed
+/// content that did not decode leaves the outer message's parts, as `get_email` lists them.
 pub fn attachment_text(
     ctx: &Context,
     id: i64,
@@ -267,12 +303,14 @@ pub fn attachment_text(
     } = load(ctx, id)?;
     let (outer, unwrapped) = unwrap_outer(ctx, &file.raw)?;
     match unwrapped {
-        Some(unwrapped) => {
-            let unwrapped = unwrapped?;
+        Some(Ok(unwrapped)) => {
             let inner = mime::parse(&unwrapped.inner)?;
             extract_one(&inner, None, filename, index, max_chars)
         }
-        None => extract_one(&outer, Some(&attachments_dir), filename, index, max_chars),
+        Some(Err(e)) if outer.is_enveloped() => Err(e.into()),
+        Some(Err(_)) | None => {
+            extract_one(&outer, Some(&attachments_dir), filename, index, max_chars)
+        }
     }
 }
 
@@ -307,14 +345,18 @@ fn load_row(ctx: &Context, row: MessageRow) -> Result<Loaded, ReadError> {
     })
 }
 
-/// The parsed outer message and, when it is enveloped, the outcome of unwrapping it.
+/// The parsed outer message and, when it is enveloped or opaque signed-data, the outcome of
+/// unwrapping it.
 type Opened<'a> = (mime::Parsed<'a>, Option<Result<Unwrapped, DecryptError>>);
 
 fn unwrap_outer<'a>(ctx: &Context, raw: &'a [u8]) -> Result<Opened<'a>, ReadError> {
     let outer = mime::parse(raw)?;
-    let unwrapped = outer
-        .is_enveloped()
-        .then(|| smime::unwrap(&outer, ctx.decryptor.as_ref()));
+    let d = ctx.decryptor.as_ref();
+    let unwrapped = if outer.is_enveloped() {
+        Some(smime::unwrap(&outer, d))
+    } else {
+        smime::unwrap_signed(&outer, d)
+    };
     Ok((outer, unwrapped))
 }
 
@@ -414,17 +456,22 @@ pub fn search(ctx: &Context, f: &Filter) -> Result<SearchResult, ReadError> {
             }
             Err(e) => {
                 skipped += 1;
-                crate::debug!("body scan: message {}: {e}", row.id);
+                crate::debug!("body scan: message {}: {}", row.id, e.kind());
             }
         }
     }
-    let truncated = stopped || candidates.len() == max;
+    let capped = candidates.len() == max;
+    let hint = match (stopped, capped) {
+        (true, _) => Some(MORE),
+        (false, true) => Some(NARROW),
+        (false, false) => None,
+    };
     Ok(SearchResult {
         hits,
         scanned: Some(scanned),
         candidates_total: Some(candidates.len()),
-        truncated,
-        hint: truncated.then(|| HINT.to_string()),
+        truncated: stopped || capped,
+        hint: hint.map(str::to_string),
         skipped,
     })
 }

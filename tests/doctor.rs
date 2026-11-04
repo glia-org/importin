@@ -99,6 +99,12 @@ fn report_on_fixture_is_ok() {
     }
     let t = &r.timings_ms;
     assert!(t.open.is_some() && t.search_header.is_some() && t.get_email.is_some());
+    assert!(t.search_all.is_some() && t.search_participant.is_some());
+    let text = doctor::render(&r, false);
+    for name in ["search_header", "search_all", "search_participant"] {
+        let prefix = format!("ok   time {name}: ");
+        assert!(text.lines().any(|l| l.starts_with(&prefix)), "{text}");
+    }
 }
 
 #[test]

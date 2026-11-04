@@ -139,18 +139,20 @@ impl<'a> Parsed<'a> {
         }
     }
 
-    /// The first text/plain part, else the first text/html part stripped. Parts with a filename or
-    /// an attachment disposition are attachments, not body. `truncated`: text or html was cut.
+    /// The first text/plain part that is not blank, else the first text/html part stripped. Parts
+    /// with a filename or an attachment disposition are attachments, not body. `truncated`: text or
+    /// html was cut.
     pub fn body(&self, max_chars: usize, want_html: bool) -> Body {
         let leaves = self.leaves();
-        let first = |mime: &str| {
+        let body_parts = |mime: &'static str| {
             leaves
                 .iter()
-                .find(|l| mime_type(&l.part) == mime && !named_or_attached(&l.part))
-                .and_then(|l| l.part.text())
+                .filter(move |l| mime_type(&l.part) == mime && !named_or_attached(&l.part))
         };
-        let plain = first("text/plain");
-        let html = first("text/html");
+        let plain = body_parts("text/plain")
+            .filter_map(|l| l.part.text())
+            .find(|t| !t.trim().is_empty());
+        let html = body_parts("text/html").next().and_then(|l| l.part.text());
         let (text, source) = match (&plain, &html) {
             (Some(p), _) => (p.to_string(), BodySource::Plain),
             (None, Some(h)) => (strip_html(h), BodySource::Html),
