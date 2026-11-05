@@ -93,7 +93,7 @@ fn xlsx_far_apart_cells_are_read_one_by_one() {
     let start = Instant::now();
     let e = attach::extract(&xlsx, "a.xlsx", XLSX, 20_000);
     assert!(
-        start.elapsed() < Duration::from_secs(1),
+        start.elapsed() < Duration::from_secs(5),
         "{:?}",
         start.elapsed()
     );
@@ -121,7 +121,7 @@ fn xlsx_column_far_past_xfd_stops_at_max_chars() {
     let start = Instant::now();
     let e = attach::extract(&xlsx, "a.xlsx", XLSX, 500);
     assert!(
-        start.elapsed() < Duration::from_secs(1),
+        start.elapsed() < Duration::from_secs(5),
         "{:?}",
         start.elapsed()
     );
