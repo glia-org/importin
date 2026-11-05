@@ -21,8 +21,9 @@ use crate::mime::{self, AttachmentState};
 /// The note for a zip that inflates, or declares it inflates, past `MAX_EMLX_BYTES`.
 const TOO_LARGE: &str = "attachment inflates past the 64 MiB limit";
 
-/// How long `pdf_extract`, which has no limit of its own, may take: a crafted PDF can make it spin.
-const PDF_TIMEOUT: Duration = Duration::from_secs(20);
+/// How long `pdf_extract` or calamine, which have no limit of their own, may take: a crafted PDF
+/// can make `pdf_extract` spin, and a workbook can list one large sheet part many times over.
+const PARSE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// No `Debug`: the text may come from a decrypted message.
 #[derive(Serialize)]
@@ -51,12 +52,17 @@ pub fn extract(bytes: &[u8], filename: &str, mime_type: &str, max_chars: usize) 
     let (text, note) = match kind(filename, mime_type) {
         Kind::Pdf => {
             let bytes = bytes.to_vec();
-            timed("pdf", PDF_TIMEOUT, move || {
+            timed("pdf", PARSE_TIMEOUT, move || {
                 pdf_extract::extract_text_from_mem(&bytes).map_err(|e| e.to_string())
             })
         }
         Kind::Docx => guarded("docx", || docx(bytes)),
-        Kind::Sheet => guarded("spreadsheet", || sheets(bytes, max_chars)),
+        Kind::Sheet => {
+            let bytes = bytes.to_vec();
+            timed("spreadsheet", PARSE_TIMEOUT, move || {
+                sheets(&bytes, max_chars)
+            })
+        }
         Kind::Pptx => guarded("pptx", || pptx(bytes)),
         Kind::Html => (mime::strip_html(&String::from_utf8_lossy(bytes)), None),
         Kind::Text => (String::from_utf8_lossy(bytes).into_owned(), None),
