@@ -3,7 +3,7 @@
 Do this after `importin doctor` is green (keychain dialog accepted, `exclude_accounts` set in
 `~/.config/importin/config.toml`).
 
-1. `~/mail/mail.json`: replace the `mail` server's `command` with `["/Users/paul/.cargo/bin/importin"]`
+1. `~/mail/mail.json`: replace the `mail` server's `command` with `["/Users/<you>/.cargo/bin/importin"]`
    (keep `"type": "local"`, `enabled`, `timeout`).
 2. `~/mail/agents/mail.md`: replace with `mail.md` from this directory (new scopes `from|to|cc|participant|
    subject|body`, `after:`/`from:` narrowing, `mail_get_thread`, `mail_attachment_text` now a server tool).

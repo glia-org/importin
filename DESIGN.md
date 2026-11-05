@@ -300,7 +300,7 @@ Unknown keys are an error at startup (as apple-mail-mcp does; it catches typos).
   learned from mailgrep (MIT) are credited in `docs/store-format.md`; no code is copied.
 - `cargo install importin` from crates.io; GitHub release binaries for `aarch64-apple-darwin` and
   `x86_64-apple-darwin` built by Actions; a Homebrew tap later if the family gets one.
-- opencode (`~/mail/mail.json`, the `mail` key): `"command": ["/Users/paul/.cargo/bin/importin"]`,
+- opencode (`~/mail/mail.json`, the `mail` key): `"command": ["/Users/<you>/.cargo/bin/importin"]`,
   `enabled: true`, timeout as today. The `mail` agent prompt gets the new scopes (`to`, `cc`, `participant`,
   `body` with its bounds) and loses the `mail_attachment_text` note and the "do not use
   get_email_attachment" line; `tools/mail.ts` and `attachment_text.py` retire. Full Disk Access stays with
