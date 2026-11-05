@@ -60,10 +60,11 @@
 //! Rows without an id: 120 subject "axb" and 121 subject "a_b" (LIKE escaping); 122 sender
 //! nocomment@example.test (comment NULL) and a To row with address NULL, comment "Undisclosed
 //! recipients"; 123–126 `Archive/2025`, 40 days old; 127–128 Sent Messages; 129–131 B INBOX, unread;
-//! 132 flagged + unread, 133 unread, 134 flagged, 135–136 read (INBOX); 137 `Re: ` in Gesendete
-//! Objekte Ä. Unread non-deleted rows: 102, 105–110, 114–117, 120–122, 129–133, 2001, 2002, 2004,
-//! 12_345. Counts (no fillers, with `encrypted` and `opaque_signed`): 43 messages; INBOX 29 total /
-//! 19 unread (the deleted 111 not counted), Sent 3/0, Gesendete 2/0, Archive 4/0, B INBOX 4/4.
+//! 132 flagged + unread, 133 unread from Erika MÜLLER, subject "Kaffee in der Müllerstraße" (Unicode
+//! case in search), 134 flagged, 135–136 read (INBOX); 137 `Re: ` in Gesendete Objekte Ä. Unread
+//! non-deleted rows: 102, 105–110, 114–117, 120–122, 129–133, 2001, 2002, 2004, 12_345. Counts (no
+//! fillers, with `encrypted` and `opaque_signed`): 43 messages; INBOX 29 total / 19 unread (the
+//! deleted 111 not counted), Sent 3/0, Gesendete 2/0, Archive 4/0, B INBOX 4/4.
 //! `Options::messages` adds plain read fillers from ROWID 100_000 in INBOX, subjects
 //! "Filler message 0000"…, 7 days old and one minute older each.
 
@@ -224,6 +225,7 @@ const DAVE: Addr = ad("Dave Example", "dave@example.test");
 const GRACE: Addr = ad("Grace Example", "grace@example.test");
 const HANS: Addr = ad("Hans Huber", "hans@example.test");
 const JOERG: Addr = ad("Jörg Müller", "joerg@example.test");
+const MUELLER: Addr = ad("Erika MÜLLER", "erika.mueller@example.test");
 const TEAM: Addr = bare("team@example.test");
 const NEWSLETTER: Addr = bare("newsletter@example.test");
 const NOCOMMENT: Addr = bare("nocomment@example.test");
@@ -526,7 +528,7 @@ fn messages(smime_raw: Option<SmimeRaw>) -> Vec<Msg> {
         simple(130, B_INBOX, SOMEONE, &[EXCL], "Gmail digest 2", 71, "Digest two."),
         simple(131, B_INBOX, SOMEONE, &[EXCL], "Gmail digest 3", 74, "Digest three."),
         Msg { flagged: true, ..simple(132, INBOX, ALICE, &[PAUL], "Action required: sign form", 77, "Please sign the form by Friday.") },
-        simple(133, INBOX, HANS, &[PAUL], "Coffee next week?", 80, "Coffee next week?"),
+        simple(133, INBOX, MUELLER, &[PAUL], "Kaffee in der Müllerstraße", 80, "Kaffee nächste Woche?"),
         Msg { read: true, flagged: true, ..simple(134, INBOX, ALICE, &[PAUL], "Travel itinerary", 83, "Your itinerary is below.") },
         Msg { read: true, ..simple(135, INBOX, BOB, &[PAUL], "Meeting minutes", 86, "Minutes of the last meeting.") },
         Msg { read: true, ..simple(136, INBOX, GRACE, &[PAUL], "Holiday schedule", 89, "The holiday schedule is out.") },

@@ -49,7 +49,8 @@ Access not granted?)" on stderr, and `importin doctor` shows `FAIL full disk acc
 | `list_mailboxes` | `account` (substring, optional) | mailboxes with message and unread counts |
 | `list_accounts` | none | accounts with mailbox and message counts |
 
-The header scopes query the Envelope Index: case-insensitive substrings (ASCII letters only), `all` =
+The header scopes query the Envelope Index: case-insensitive substrings (lowercased, so "müller"
+finds "MÜLLER" but "strasse" not "Straße"), `all` =
 subject, sender, every recipient and Mail's summary, `participant` = sender, To, Cc and Bcc. `scope: body`
 reads message files instead and needs a query: the candidates are the newest `body_scan_max` rows that
 pass the other filters, received since `after` (default `body_scan_days` before `before`, or before

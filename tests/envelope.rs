@@ -305,6 +305,26 @@ fn like_metachars_escaped() {
 }
 
 #[test]
+fn search_folds_unicode_case() {
+    let fx = fixture::build(Epoch::Unix);
+    let env = open(&fx, &[]);
+    // 133 is from "Erika MÜLLER" with subject "Kaffee in der Müllerstraße"; 118 goes to "Jörg Müller".
+    assert_eq!(search(&env, Scope::From, &["müller"]), vec![133]);
+    assert_eq!(search(&env, Scope::From, &["MÜLLER"]), vec![133]);
+    assert_eq!(search(&env, Scope::Subject, &["MÜLLER"]), vec![133]);
+    assert_eq!(
+        search(&env, Scope::To, &["MÜLLER"]),
+        vec![fx.ids.umlaut_mailbox]
+    );
+    assert_eq!(
+        search(&env, Scope::All, &["müller"]),
+        vec![fx.ids.umlaut_mailbox, 133]
+    );
+    // Lowercasing only, no full case folding: "STRASSE" does not match "straße".
+    assert!(search(&env, Scope::Subject, &["STRASSE"]).is_empty());
+}
+
+#[test]
 fn null_address_fields_are_empty_strings() {
     let fx = fixture::build(Epoch::Unix);
     let env = open(&fx, &[]);

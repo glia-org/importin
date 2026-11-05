@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chrono::{DateTime, FixedOffset, Utc};
-use rusqlite::types::Value;
+use rusqlite::functions::FunctionFlags;
+use rusqlite::types::{ToSqlOutput, Value, ValueRef};
 use rusqlite::{Connection, OpenFlags, Row, params_from_iter};
 use serde::Serialize;
 
@@ -238,6 +239,7 @@ pub fn open(
             (conn, OpenMode::Snapshot(copy), Some(dir))
         }
     };
+    register_ulower(&conn).map_err(EnvelopeError::Open)?;
 
     let columns = columns(&conn).map_err(EnvelopeError::Open)?;
     let missing: Vec<String> = REQUIRED
@@ -339,6 +341,25 @@ pub(crate) fn connect(path: &Path) -> rusqlite::Result<Connection> {
     // SQLite opens lazily: an unreadable `-wal`/`-shm` only shows on the first read.
     conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))?;
     Ok(conn)
+}
+
+/// `ulower(x)`: non-ASCII text lowercased by `str::to_lowercase`, as `LIKE` folds ASCII only
+/// ("müller" would miss "MÜLLER"); ASCII text, which `LIKE` folds itself, and other values pass
+/// through. Lowercasing is not full case folding: "STRASSE" still misses "Straße".
+fn register_ulower(conn: &Connection) -> rusqlite::Result<()> {
+    conn.create_scalar_function(
+        "ulower",
+        1,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        |ctx| {
+            Ok(match ctx.get_raw(0) {
+                ValueRef::Text(t) if !t.is_ascii() => {
+                    ToSqlOutput::Owned(Value::Text(String::from_utf8_lossy(t).to_lowercase()))
+                }
+                _ => ToSqlOutput::Arg(0),
+            })
+        },
+    )
 }
 
 /// Copies the index and those of its `-wal`/`-shm` that exist into a private temp dir. An unreadable
@@ -443,10 +464,10 @@ fn is_excluded(u: &UrlParts, label: Option<&AccountLabel>, patterns: &[glob::Pat
         .any(|n| patterns.iter().any(|p| p.matches(&n)))
 }
 
-/// `%term%` with `%`, `_` and `\` escaped for `LIKE … ESCAPE '\'`.
+/// `%term%`, lowercased like `ulower`, with `%`, `_` and `\` escaped for `LIKE … ESCAPE '\'`.
 fn like_pattern(term: &str) -> String {
     let mut s = String::from("%");
-    for c in term.chars() {
+    for c in term.to_lowercase().chars() {
         if matches!(c, '%' | '_' | '\\') {
             s.push('\\');
         }
@@ -928,9 +949,10 @@ fn accounts_from(counts: &HashMap<i64, (i64, i64)>, boxes: Vec<Mailbox>) -> Vec<
     out
 }
 
+/// `pat` comes from `like_pattern`, already lowercased.
 fn like(expr: &str, pat: &str, p: &mut Vec<Value>) -> String {
     p.push(Value::Text(pat.to_owned()));
-    format!("{expr} LIKE ? ESCAPE '\\'")
+    format!("ulower({expr}) LIKE ? ESCAPE '\\'")
 }
 
 /// `imap://paul%40example.test@mail.example.test/INBOX` → user `paul@example.test`, host
