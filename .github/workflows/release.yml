@@ -8,6 +8,9 @@ on:
       tag:
         description: existing v* tag to build and release
         required: true
+      runner:
+        description: runner label (macos-latest is arm64; macos-15-intel when that pool is full)
+        default: macos-latest
 
 env:
   TAG: ${{ inputs.tag || github.ref_name }}
@@ -15,7 +18,7 @@ env:
 jobs:
   # One macOS runner builds both targets: a second job doubles the wait for a runner.
   build:
-    runs-on: macos-latest
+    runs-on: ${{ inputs.runner || 'macos-latest' }}
     steps:
       - uses: actions/checkout@v5
         with:
