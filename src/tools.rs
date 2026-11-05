@@ -238,7 +238,8 @@ impl Server {
 
     #[tool(
         description = "Text of one attachment, chosen by filename or index as get_email lists \
-            them: PDF, Word, Excel/ODS, PowerPoint, HTML and text; other types get a one-line note.",
+            them: PDF, Word, Excel (xlsx, xlsb), PowerPoint, HTML and text; other types get a \
+            one-line note.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,

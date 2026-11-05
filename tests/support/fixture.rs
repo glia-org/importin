@@ -929,6 +929,13 @@ pub fn docx() -> Vec<u8> {
 }
 
 pub fn xlsx() -> Vec<u8> {
+    xlsx_with_rows(
+        "<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>xlsx sentence</t></is></c></row>",
+    )
+}
+
+/// A one-sheet workbook ("Sheet1") whose `<sheetData>` holds `rows`.
+pub fn xlsx_with_rows(rows: &str) -> Vec<u8> {
     let ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     zip(&[
         (
@@ -958,10 +965,7 @@ pub fn xlsx() -> Vec<u8> {
         ),
         (
             "xl/worksheets/sheet1.xml",
-            format!(
-                "{XML}<worksheet xmlns=\"{ns}\"><sheetData><row r=\"1\">\
-                 <c r=\"A1\" t=\"inlineStr\"><is><t>xlsx sentence</t></is></c></row></sheetData></worksheet>"
-            ),
+            format!("{XML}<worksheet xmlns=\"{ns}\"><sheetData>{rows}</sheetData></worksheet>"),
         ),
     ])
 }
