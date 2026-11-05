@@ -45,7 +45,7 @@ Access not granted?)" on stderr, and `importin doctor` shows `FAIL full disk acc
 | `search` | `query` (words; all must match), `scope` = `all` (default) \| `subject` \| `from` \| `to` \| `cc` \| `participant` \| `body`, `after`/`before` (RFC 3339 or `YYYY-MM-DD` = local midnight), `mailbox`, `account`, `from` (substrings), `unread`, `flagged`, `limit` 1–200 (25), `offset` | `hits`, newest first: `id`, dates, subject, from/to/cc, mailbox, account, read, flagged, encrypted, signed, has_attachments, `snippet`; `truncated` |
 | `get_email` | `id`, `max_chars` 500–200 000 (20 000), `html` (also return the raw HTML part) | headers with to/cc/bcc/reply_to, `message_id`, `body` and `body_source` (plain, html, none), `encryption`, `attachments` with their `state` |
 | `get_thread` | `id`, `limit` 1–200 (50) | the newest `limit` messages of the conversation, oldest first, in the search hit shape; `truncated` |
-| `attachment_text` | `id`, `filename` or `index` as `get_email` lists them, `max_chars` 500–100 000 (20 000) | text of PDF, Word (docx), Excel/ODS, PowerPoint (pptx), HTML and text attachments; other types get a one-line note |
+| `attachment_text` | `id`, `filename` or `index` as `get_email` lists them, `max_chars` 500–100 000 (20 000) | text of PDF, Word (docx), Excel (xlsx, xlsb), PowerPoint (pptx), HTML and text attachments; other types get a one-line note |
 | `list_mailboxes` | `account` (substring, optional) | mailboxes with message and unread counts |
 | `list_accounts` | none | accounts with mailbox and message counts |
 

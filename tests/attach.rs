@@ -131,6 +131,20 @@ fn xlsx_column_far_past_xfd_stops_at_max_chars() {
 }
 
 #[test]
+fn xls_and_ods_are_not_extracted() {
+    for (name, mime) in [
+        ("a.xls", "application/vnd.ms-excel"),
+        ("a.ods", "application/vnd.oasis.opendocument.spreadsheet"),
+        ("part-4", "application/vnd.ms-excel"),
+    ] {
+        let e = attach::extract(b"workbook bytes", name, mime, 20_000);
+        assert_eq!(e.text, "", "{name}");
+        let note = format!("{mime}, 14 bytes, no text extraction");
+        assert_eq!(e.note.as_deref(), Some(&*note), "{name}");
+    }
+}
+
+#[test]
 fn pptx_text() {
     let e = attach::extract(&fixture::pptx(), "a.pptx", PPTX, 20_000);
     assert_eq!(e.text, "== slide 1\npptx sentence\n", "note: {:?}", e.note);

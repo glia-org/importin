@@ -86,7 +86,7 @@ fn kind(filename: &str, mime_type: &str) -> Kind {
     match ext.as_deref() {
         Some("pdf") => return Kind::Pdf,
         Some("docx") => return Kind::Docx,
-        Some("xlsx" | "xls" | "xlsb" | "ods") => return Kind::Sheet,
+        Some("xlsx" | "xlsb") => return Kind::Sheet,
         Some("pptx") => return Kind::Pptx,
         Some("html" | "htm") => return Kind::Html,
         Some("txt" | "md" | "csv") => return Kind::Text,
@@ -97,9 +97,7 @@ fn kind(filename: &str, mime_type: &str) -> Kind {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => Kind::Docx,
         "application/vnd.openxmlformats-officedocument.presentationml.presentation" => Kind::Pptx,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        | "application/vnd.ms-excel"
-        | "application/vnd.ms-excel.sheet.binary.macroenabled.12"
-        | "application/vnd.oasis.opendocument.spreadsheet" => Kind::Sheet,
+        | "application/vnd.ms-excel.sheet.binary.macroenabled.12" => Kind::Sheet,
         "text/html" => Kind::Html,
         m if m.starts_with("text/") => Kind::Text,
         _ => Kind::Other,
@@ -164,8 +162,7 @@ fn docx(bytes: &[u8]) -> Result<String, String> {
 /// text past `max_chars`.
 fn sheets(bytes: &[u8], max_chars: usize) -> Result<String, String> {
     // calamine inflates the parts itself; zip refuses to inflate an entry past its declared size,
-    // so the declared sizes of a zip workbook (xlsx, xlsb, ods) bound what calamine reads. xls is
-    // not a zip.
+    // so the declared sizes of the workbook (xlsx and xlsb are zips) bound what calamine reads.
     if let Ok(zip) = ZipArchive::new(Cursor::new(bytes)) {
         let mut declared: u64 = 0;
         for i in 0..zip.len() {
@@ -178,8 +175,14 @@ fn sheets(bytes: &[u8], max_chars: usize) -> Result<String, String> {
     }
     // A char takes at most 4 bytes: past `limit` bytes the text is cut at `max_chars` anyway.
     let limit = max_chars.saturating_mul(4);
-    let mut book =
-        calamine::open_workbook_auto_from_rs(Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    // Not `open_workbook_auto_from_rs`: it tries xls first, whatever the name, and calamine reads
+    // xls (at open) and ods only into a dense range.
+    let mut book = match calamine::open_workbook_from_rs(Cursor::new(bytes)) {
+        Ok(x) => Sheets::Xlsx(x),
+        Err(xlsx) => Sheets::Xlsb(
+            calamine::open_workbook_from_rs(Cursor::new(bytes)).map_err(|_| xlsx.to_string())?,
+        ),
+    };
     let mut out = String::new();
     for name in book.sheet_names() {
         if out.len() > limit {
@@ -188,7 +191,6 @@ fn sheets(bytes: &[u8], max_chars: usize) -> Result<String, String> {
         match &mut book {
             // `worksheet_range` is dense over the bounding box of the cells: values at A1 and
             // XFD1048576 make 17 billion cells, and a failed allocation aborts past catch_unwind.
-            // calamine has no cell reader for xls (dense already at open) or ods.
             Sheets::Xlsx(x) => {
                 let cells = match x.worksheet_cells_reader(&name) {
                     Ok(mut r) => used(|| r.next_cell())?,
@@ -205,15 +207,7 @@ fn sheets(bytes: &[u8], max_chars: usize) -> Result<String, String> {
                 out += &format!("== {name}\n");
                 sparse_rows(&mut out, cells, limit);
             }
-            book => {
-                let range = book.worksheet_range(&name).map_err(|e| e.to_string())?;
-                out += &format!("== {name}\n");
-                for row in range.rows() {
-                    let cells: Vec<String> = row.iter().map(ToString::to_string).collect();
-                    out += &cells.join("\t");
-                    out.push('\n');
-                }
-            }
+            Sheets::Xls(_) | Sheets::Ods(_) => unreachable!("opened as xlsx or xlsb"),
         }
     }
     Ok(out)
