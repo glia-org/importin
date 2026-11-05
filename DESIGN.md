@@ -4,6 +4,11 @@ Amended 2026-11-04 during implementation: see §8 (get_thread, search from, scop
 hints), §4 (account labels from the Accounts database), §6 (blank text/plain parts) and §7 (opaque
 signed-only messages, the openssl fallback for signed-data).
 
+Amended 2026-11-05 to match the code as built: §2 (what the read-only test checks), §3 (the `accounts`,
+`read` and `log` modules), §7, §11 and §14 (the openssl decryptor runs the `openssl` binary,
+`OpensslCli`), §8 (result objects, bounds, `body_html`, `note`), §10 (`openssl_bin`, `IMPORTIN_CONFIG`,
+limits) and §15 (decision 11).
+
 Status: specification, written 2026-11-04 from the decisions in `docs/design-panel-2026-11-04.html` and the
 user's picks of the same day (all recommendations taken; runtime changed to Rust; name Importin). Nothing is
 built yet. The implementation plan follows this document.
@@ -34,8 +39,13 @@ store (the version directory is discovered, not hardcoded).
 ## 2. Rules
 
 - **Read-only by construction.** SQLite opened `SQLITE_OPEN_READ_ONLY`, `.emlx` opened for reading, no
-  network, no `osascript`. A test greps the source tree for `osascript`, `imap`, `smtp`, `send_`, `move_`,
-  `delete_`, `set_flag` and fails on a hit outside the test itself. No `--read-only` flag exists.
+  network, no `osascript`. `tests/readonly.rs` reads every line of `src/**/*.rs` and fails on any of
+  `osascript`, `ImapClient`, `smtp`, `send_mail`, `move_message`, `delete_message`, `set_flag`,
+  `SQLITE_OPEN_READ_WRITE`, `SQLITE_OPEN_CREATE`, `immutable=1`, `fs::write`, `File::create`,
+  `OpenOptions`, `Connection::open(` (case-insensitive; `tests/` may name them, and bare `imap` is allowed
+  because `envelope` parses `imap://` URLs). A second check fails unless `src/` has an `open_with_flags`
+  call and each one has `SQLITE_OPEN_READ_ONLY` on its line or in the six lines before it. No
+  `--read-only` flag exists.
 - **Never read the user's mail while developing.** All tests run on the synthetic store (§10). Real-store
   checks produce only numbers and booleans (`doctor --anon`), or go through an opencode session instructed to
   answer with booleans and counts.
@@ -55,18 +65,22 @@ One Rust crate, one binary, no runtime dependencies beyond macOS. Modules, each 
 |---|---|---|
 | `store` | find `~/Library/Mail/V<n>` (highest n), classify access errors (FDA missing vs. absent store vs. undetermined), locate the Envelope Index | — |
 | `envelope` | open the Envelope Index read-only, resolve the schema at runtime, detect the timestamp epoch, run the metadata queries (search, get, thread, mailboxes, accounts) | `store`, rusqlite |
+| `accounts` | read the account labels (username, name, type, by uuid) from `~/Library/Accounts/Accounts4.sqlite` once at startup, read-only (§4) | `envelope` (its read-only open), rusqlite |
 | `paths` | map a message ROWID and mailbox URL to its `.emlx` / `.partial.emlx` file and its `Attachments/` directory | `store` |
 | `emlx` | split an `.emlx` into byte count, raw RFC 822 bytes and the plist trailer; repair the single-dash boundary; read the flag bits | plist |
 | `mime` | parse the raw message: headers, address lists, text body (plain preferred, HTML stripped as fallback), parts, attachment states | mail-parser |
-| `smime` | detect enveloped messages, base64 the body to DER, decrypt through a `Decryptor` (`SecurityCms` in production, `OpensslPem` as fallback and in tests), unwrap the signed layer, hand back an inner MIME entity | `mime` |
+| `smime` | detect enveloped messages, base64 the body to DER, decrypt through a `Decryptor` (`SecurityCms` in production, `OpensslCli` when configured and in tests; both run a binary), unwrap the signed layer, hand back an inner MIME entity | `mime` |
 | `attach` | locate attachment bytes (inline, external, not downloaded, not extractable) and extract text (PDF, docx, xlsx, pptx, HTML, text) | `paths`, `mime`, pdf-extract, calamine, zip, quick-xml |
+| `read` | compose one message for `get_email` and `attachment_text` (index row, file, MIME, S/MIME) and run the `scope: body` scan | `envelope`, `accounts`, `paths`, `emlx`, `mime`, `smime`, `attach` |
 | `tools` | the MCP tool definitions and their JSON shapes; glue only | rmcp, all above |
 | `doctor` | the CLI health check (§9) | all above |
 | `config` | `config.toml` and environment overrides | — |
+| `log` | the stderr logger, level from `IMPORTIN_LOG` (§9) | — |
 
 Data flow of a `get_email(id)`: `envelope` fetches the row and its recipients → `paths` finds the file →
 `emlx` splits it → `mime` parses → if enveloped, `smime` decrypts and `mime` parses the inner entity →
-`tools` shapes the response. Nothing is stored between calls except the `paths` cache (§5).
+`read` assembles the response and `tools` returns it as JSON. Nothing is stored between calls except the
+`paths` cache (§5).
 
 ## 4. The Envelope Index
 
@@ -91,14 +105,15 @@ Data flow of a `get_email(id)`: `envelope` fetches the row and its recipients �
 - **Timestamps are detected.** Sample `MAX(date_received)`: a value ≥ 1e9 means Unix seconds (macOS 26),
   otherwise Cocoa seconds (offset 978307200). `doctor` prints the detected epoch.
 - **Accounts** are derived from `mailboxes.url` (`imap://user%40host@host/INBOX` → user, host). No JXA.
-  `config.exclude_accounts` holds glob patterns on `user@host`; excluded accounts are invisible to every
-  tool. The mailbox display name is the URL path, percent-decoded.
+  `config.exclude_accounts` holds glob patterns (matched as below); excluded accounts are invisible to
+  every tool. The mailbox display name is the URL path, percent-decoded.
   *Amended 2026-11-04 (final fix wave):* the real store's URLs are `mailbox://<uuid>/<path>`, which carry
   no address, so the uuid is looked up in `~/Library/Accounts/Accounts4.sqlite` (`ZACCOUNT.ZIDENTIFIER` →
   `ZUSERNAME`, `ZACCOUNTDESCRIPTION`, `ZACCOUNTTYPE` → `ZACCOUNTTYPE.ZACCOUNTTYPEDESCRIPTION`), opened like
   the Envelope Index (read-only, `mode=ro`, never `immutable=1`) once at startup; `IMPORTIN_ACCOUNTS_DB`
-  overrides the path. The account's identifier is the username when it holds an `@`, else the
-  description, else the uuid; an unreadable database leaves the uuids and never stops the server.
+  overrides the path (an environment variable only; there is no config key). The account's identifier is
+  the username when it holds an `@`, else the description, else the uuid; an unreadable database leaves
+  the uuids and never stops the server.
   Exclusion globs are matched, lowercased, against user, host, `user@host`, uuid, username, description
   and type, empty ones skipped (`["Google"]` excludes the Google account).
 
@@ -139,41 +154,54 @@ Data flow of a `get_email(id)`: `envelope` fetches the row and its recipients �
 
 ## 7. S/MIME
 
-- **Detection.** Outer `Content-Type: application/pkcs7-mime` with `smime-type=enveloped-data` or
-  `authEnveloped-data`, or an `application/pkcs7-mime` part named `smime.p7m`. The flags bit 3 is a hint
-  for `search` results (`encrypted: true` without opening the file), the content type is the decision.
+- **Detection.** Outer `Content-Type: application/pkcs7-mime` (or `x-pkcs7-mime`) with
+  `smime-type=enveloped-data` or `authEnveloped-data`, or without `smime-type` and named `smime.p7m`; a
+  `.p7m` deeper in the tree is an attachment. The flags bit 3 is a hint for `search` results
+  (`encrypted: true` without opening the file), the content type is the decision.
 - **Decrypting.** The body is base64-decoded to DER. `Decryptor::decrypt(der) -> Result<Vec<u8>>`:
   - `SecurityCms` (production): `/usr/bin/security cms -D` with DER on stdin and the inner entity on stdout,
-    no temp files, 10 s timeout, stderr captured into the error. Apple-signed binary, so the keychain ACL
-    grant ("Always Allow" on the first prompt) survives Importin rebuilds. Uses the login keychain's
-    identities; an identity that lives only in the iCloud/data-protection keychain is reachable by Mail but
-    not by any other process. **Unverified on this Mac** (the temp-keychain probe failed with NSS -8147 "not
-    a recipient" because that keychain was not on the search list); `doctor` runs the real check (§9).
-  - `OpensslPem` (fallback, and the test path): `openssl` crate `CmsContentInfo::decrypt` with a PEM key and
-    cert from config (`[smime] key = …, cert = …`). For people whose key is not in a macOS keychain. Needs
-    `-legacy` handling documented for Keychain-exported `.p12` files (RC2-40).
+    no temp files, 10 s timeout (the child is killed), the last 600 bytes of stderr captured into the
+    error. Apple-signed binary, so the keychain ACL grant ("Always Allow" on the first prompt) survives
+    Importin rebuilds. Uses the login keychain's identities; an identity that lives only in the
+    iCloud/data-protection keychain is reachable by Mail but not by any other process. **Unverified on
+    this Mac** (the temp-keychain probe failed with NSS -8147 "not a recipient" because that keychain was
+    not on the search list); `doctor` runs the real check (§9).
+    It is never handed `authEnveloped-data`: that is reported as `authEnveloped-data not supported by
+    security cms` without running it.
+  - `OpensslCli` (`smime.decryptor = "openssl"`, and the test path): `openssl cms -decrypt -inform DER
+    -inkey <key> -recip <cert>` run as `smime.openssl_bin` (default `openssl` on `PATH`), DER on stdin,
+    with the PEM key and cert from config (`[smime] key = …, cert = …`, both required with this decryptor)
+    and the same timeout and stderr handling. No `openssl` crate is linked. For people whose key is not in
+    a macOS keychain, and for `authEnveloped-data`, which it passes on (untested against real mail).
+    Keychain-exported `.p12` files may need `-legacy` when converted to PEM (RC2-40).
 - **Unwrapping.** The decrypted bytes are a MIME entity. If it is `multipart/signed`, the first part is
   the content and `signed: true`. If it is `application/pkcs7-mime; smime-type=signed-data`, run the decoder
   again (signed-data decodes without a key) and parse the result. `security cms -D` verifies the signature
   and fails on one it cannot verify; `SecurityCms` then decodes signed-data with `openssl cms -verify
-  -noverify -nosigs` (`smime.openssl_bin`). Then the usual `multipart/alternative` or `mixed` handling of
-  §6. Signature verification is **not** done in phase 1: the response carries `signature: "not
-  verified"`. Signed-only (unencrypted) `multipart/signed` messages pass through §6 unchanged with
-  `signed: true` and the `.p7s` part hidden from the attachment list. Opaque signed-only messages
-  (top-level signed-data) are decoded the same way and their content is the message (body and
-  attachments, `smime.p7m` not listed), with `encrypted: false, decrypted: false, signed: true`; when
-  decoding fails, the outer message as it is plus `error`. The body scan does not decode them.
+  -noverify -nosigs` (`smime.openssl_bin`), the command `OpensslCli` uses from the start. Then the usual
+  `multipart/alternative` or `mixed` handling of §6. Signature verification is **not** done in phase 1:
+  the response carries `signature: "not verified"`. Signed-only (unencrypted) `multipart/signed` messages
+  pass through §6 unchanged with `signed: true` and the `.p7s` part hidden from the attachment list.
+  Opaque signed-only messages (top-level signed-data) are decoded the same way and their content is the
+  message (body and attachments, `smime.p7m` not listed), with `encrypted: false, decrypted: false,
+  signed: true`; when decoding fails, the outer message as it is plus `error`. The body scan does not
+  decode them.
 - **Response fields.** `encryption: {encrypted, decrypted, method: "security"|"openssl", signed, signature,
-  error}`. On failure `decrypted: false`, `body: ""`, `error` with the decoder's message; the headers and
-  attachment list from the outer message are still returned.
+  error}`, `method` null when nothing was decrypted. On failure `decrypted: false`, `body: ""`, `error`
+  with the decoder's message; the headers and attachment list from the outer message (less its
+  `smime.p7m`) are still returned.
 - **Search** never looks inside encrypted bodies. Subject, addresses and dates of encrypted mail are in the
   Envelope Index and searchable like any other.
 
 ## 8. Tools (MCP, stdio)
 
-All tools are read-only and annotated `readOnlyHint: true`. Dates in and out are ISO 8601 with offset;
-`after`/`before` accept `YYYY-MM-DD` too. Addresses are `{name, address}`. Errors are MCP tool errors with a
-one-line message and, where useful, a `hint` (for example "narrow with after: or scope: subject").
+All tools are read-only and annotated `readOnlyHint: true` (`destructiveHint: false`, `idempotentHint:
+true`, `openWorldHint: false`). Each returns one JSON object, as pretty-printed text and as
+`structuredContent`. Dates in and out are ISO 8601 with offset; `after`/`before` accept `YYYY-MM-DD` too
+(local midnight), and `after` must be earlier than `before`. Addresses are `{name, address}`. Errors are
+MCP tool errors (`isError: true`) with a one-line message, for example "limit must be between 1 and 200;
+got 0"; a bounded number outside its range is such an error, never clamped. `hint` is a field of the
+`search` result, not of errors.
 
 ### `search`
 
@@ -181,13 +209,14 @@ Args: `query` (string, may be empty when filters do the work, except with `scope
 `subject` | `from` | `to` | `cc` | `participant` | `body`, default `all`, any case), `after`, `before`, `mailbox`
 (substring of the display name), `account` (substring of the account identifier, §4), `from`
 (substring of the sender's address or name; combines with any scope, `body` included), `unread` (bool),
-`flagged` (bool), `limit` (1–200, default 25), `offset`.
+`flagged` (bool), `limit` (1–200, default 25), `offset` (default 0).
 
 Semantics: `query` is split on whitespace into terms; every term must match (AND) within the chosen
-scope. Header scopes match case-insensitively as substrings of `prefix || subject`, `address` or
-`comment` of the sender, the To list, the Cc list, or any of those (`participant` = from + to + cc + bcc;
-`all` = subject + participant + `summaries.summary` when present). Results ordered by `date_received`
-descending (relevance ranking is out of scope; dates are what the agent prompt asks for).
+scope. Header scopes match case-insensitively (SQLite `LIKE`: ASCII letters only) as substrings of
+`prefix || subject`, `address` or `comment` of the sender, the To list, the Cc list, or any of those
+(`participant` = from + to + cc + bcc; `all` = subject + participant + `summaries.summary` when present).
+Results ordered by `date_received` descending (relevance ranking is out of scope; dates are what the agent
+prompt asks for).
 
 `scope: body` needs a non-empty `query`; without one the call is a tool error ("scope body needs a query;
 use another scope for header-only filters"). It runs the bounded scan: candidates are the header-filtered
@@ -195,46 +224,59 @@ rows (`after` defaults to `body_scan_days`, 90, before `before`, or before now, 
 `mailbox`/`account`/`from` narrow further), capped
 at `config.body_scan_max` (default 500) newest rows; each candidate's `.emlx` is parsed and its text body
 (§6; encrypted bodies are skipped) searched for all terms; stops when `limit` hits are found. The response
-says `scanned`, `candidates_total`, `truncated` so the agent can narrow instead of guessing, and a `hint`:
+says `scanned`, `candidates_total`, `truncated` so the agent can narrow instead of guessing, `skipped`
+(candidates whose file could not be located, read or parsed), and a `hint`:
 "more hits may exist; raise limit or use offset" when the scan stopped at `limit` hits, else "narrow with
 after:, from: or mailbox:" when the candidate cap was reached.
 
-Returns: `[{id, date_received, subject, from, to, cc, mailbox, account, read, flagged, encrypted, signed,
-has_attachments, snippet}]` where `snippet` is the Envelope Index summary when present, else null.
+Returns `{hits, scanned, candidates_total, truncated, hint, skipped}`, `hits` = `[{id, date_received,
+date_sent, subject, from, to, cc, mailbox, account, read, flagged, conversation_id, snippet, encrypted,
+signed, has_attachments}]` where `snippet` is the Envelope Index summary when present, else null, and
+`encrypted`, `signed`, `has_attachments` come from the index's flag bits (no file read). For header
+scopes `scanned`, `candidates_total` and `hint` are null, `skipped` is 0, and `truncated: true` means
+`limit` hits came back, so more may exist.
 
 ### `get_email`
 
-Args: `id` (int), `max_chars` (default 20 000), `html` (bool, default false: return the stripped HTML
-body as well).
+Args: `id` (int), `max_chars` (500–200 000, default 20 000), `html` (bool, default false: also return the
+first `text/html` part, raw and unstripped, as `body_html`, cut at `max_chars`).
 
 Returns: `{id, message_id, in_reply_to, conversation_id, date_sent, date_received, subject, from, to, cc,
-bcc, reply_to, mailbox, account, read, flagged, body, body_source, truncated, encryption, attachments:
-[{index, filename, mime_type, size, state}]}`.
+bcc, reply_to, mailbox, account, read, flagged, body, body_html, body_source, truncated, encryption,
+attachments: [{index, part, filename, mime_type, size, state}]}`. `body_html` is null unless `html` is set
+and the message has an HTML part; `truncated` says `body` or `body_html` was cut; `part` is the IMAP-style
+part number ("2", "2.2").
 
 ### `get_thread`
 
 Args: `id`, `limit` (1–200, default 50). Returns `{messages, truncated}`: the newest `limit` non-deleted
-messages sharing the row's `conversation_id`, oldest first, in the `search` result shape; `truncated: true`
+messages sharing the row's `conversation_id`, oldest first, in the `search` hit shape; `truncated: true`
 when older messages of the conversation were left out. A message without a `conversation_id` (or a schema
 without the column) comes back alone; an unknown or excluded `id` is a tool error.
 
 ### `attachment_text`
 
-Args: `id`, `filename` (exactly as listed) or `index`, `max_chars` (500–100 000, default 20 000).
-Returns `{filename, mime_type, state, text, truncated}`. Text from: PDF (pdf-extract, panics caught), docx
-(`word/document.xml` `<w:t>`), xlsx/xls/ods (calamine, sheet by sheet, tab-separated), pptx
-(`ppt/slides/slide*.xml` `<a:t>`), HTML (stripped), `text/*`. Images and everything else: a one-line note
-with the size. `not_downloaded` → error "never fetched from the server; open it in Mail once".
+Args: `id`, `filename` (exactly as listed) or `index` (used when `filename` is absent or matches none),
+`max_chars` (500–100 000, default 20 000). Returns `{filename, mime_type, state, text, truncated, note}`.
+Text from (by extension first, then MIME type): PDF (pdf-extract, panics caught), docx
+(`word/document.xml` `<w:t>`), xlsx/xls/xlsb/ods (calamine, sheet by sheet, tab-separated), pptx
+(`ppt/slides/slide*.xml` `<a:t>`), HTML (stripped), `text/*` and `.txt`/`.md`/`.csv`. Images and
+everything else: empty `text` and a one-line `note` with the type and size; a document that fails to
+parse gives empty `text` and a `note`, not an error. `not_downloaded` → error "<filename> was never
+fetched from the server; open it in Mail once to download it"; `not_extractable` → error "<filename> is
+declared but not present on disk". An encrypted message's attachments come from the decrypted entity; a
+decryption failure is an error.
 
 ### `list_mailboxes`
 
-Args: `account` (optional substring). Returns `[{name, url, account, messages, unread}]`, excluded
-accounts omitted.
+Args: `account` (optional, case-insensitive substring of the account identifier). Returns `{mailboxes:
+[{name, url, account, messages, unread}]}`, counts of non-deleted messages, excluded accounts omitted.
 
 ### `list_accounts`
 
-Returns `[{identifier, label, kind, uuid, user, host, scheme, mailboxes, messages}]` (`uuid` null for an
-`imap://` URL, `label` and `kind` null without an Accounts database entry, §4), excluded accounts omitted.
+Returns `{accounts: [{identifier, label, kind, uuid, user, host, scheme, mailboxes, messages}]}`, one
+entry per identifier and uuid (`uuid` null for an `imap://` URL, `label` and `kind` null without an
+Accounts database entry, §4), excluded accounts omitted.
 
 Dropped from 0.5.0: `get_email_links`, `get_email_attachment` (wrote files to disk), `get_attachment`, the
 `index://status` resource, every `filter=` preset (expressible with `unread`/`flagged`/`after`).
@@ -261,16 +303,21 @@ Dropped from 0.5.0: `get_email_links`, `get_email_attachment` (wrote files to di
 ```toml
 mail_root = "~/Library/Mail"          # IMPORTIN_MAIL_ROOT overrides (tests point it at a fixture tree)
 exclude_accounts = ["*@gmail.com"]     # globs on address, account name, type or uuid (§4)
-body_scan_days = 90                    # default after: for scope: body
+body_scan_days = 90                    # default after: for scope: body, at most 36500
 body_scan_max = 500                    # candidate cap for scope: body
 
 [smime]
 decryptor = "security"                 # or "openssl"
-key = ""                               # PEM, openssl only
-cert = ""                              # PEM, openssl only
+# key = "~/.config/importin/smime-key.pem"    # PEM path, openssl only, required with it
+# cert = "~/.config/importin/smime-cert.pem"  # PEM path, openssl only, required with it
+openssl_bin = "openssl"                # looked up on PATH: OpensslCli, and signed-data security refuses (§7)
 ```
 
-Unknown keys are an error at startup (as apple-mail-mcp does; it catches typos).
+Unknown keys are an error at startup (as apple-mail-mcp does; it catches typos). So are `body_scan_days`
+above 36 500 and `decryptor = "openssl"` without both `key` and `cert`. `IMPORTIN_CONFIG` names another
+config file, which must then exist (a missing default file means the defaults). `IMPORTIN_ACCOUNTS_DB`
+sets the Accounts database path (§4); it has no config key. Paths here and in these variables may start
+with `~/`.
 
 ## 11. Testing
 
@@ -281,7 +328,7 @@ Unknown keys are an error at startup (as apple-mail-mcp does; it catches typos).
   single-dash boundary, HTML-only bodies, a `message/rfc822` part, a signed-only message, and one
   enveloped + signed message generated at test time by `openssl` with a throwaway cert (test skipped with a
   message if `openssl` is absent). Fixture attachments include a small PDF, docx, xlsx and pptx.
-- **Unit tests** per module against the fixture; the `smime` tests use `OpensslPem` with the throwaway key.
+- **Unit tests** per module against the fixture; the `smime` tests use `OpensslCli` with the throwaway key.
 - **Protocol tests** spawn the release binary with `IMPORTIN_MAIL_ROOT` set, speak JSON-RPC over stdio
   (`initialize`, `tools/list`, one `tools/call` per tool, an error case each) and check shapes and
   budgets (§2) on the fixture.
@@ -327,8 +374,8 @@ only speed up, never hide, a message.
 
 | # | risk | handling |
 |---|---|---|
-| R1 | `security cms -D` cannot find the identity (iCloud-only keychain, ACL) | `doctor` probe before M3 is called done; `OpensslPem` as the documented fallback |
-| R2 | `authEnveloped-data` (AES-GCM) unsupported by `security cms` | detected and reported as `error: "authEnveloped not supported by security cms"`; openssl path covers it |
+| R1 | `security cms -D` cannot find the identity (iCloud-only keychain, ACL) | `doctor` probe before M3 is called done; `OpensslCli` (`smime.decryptor = "openssl"`, PEM key and cert) as the documented fallback |
+| R2 | `authEnveloped-data` (AES-GCM) unsupported by `security cms` | detected and reported as `error: "authEnveloped-data not supported by security cms"` without running `security`; `OpensslCli` passes it to `openssl cms -decrypt` (untested against real mail) |
 | R3 | shard formula wrong on this store | walk fallback; doctor reports formula vs. walk hits |
 | R4 | flag-bit layout differs from the assumed one | content type decides encryption; bits are hints; doctor cross-checks |
 | R5 | Envelope Index schema changes with a macOS release | runtime resolution; required-column failure prints the schema |
@@ -350,3 +397,4 @@ only speed up, never hide, a message.
 | 8 | Code reuse | **port mailgrep's knowledge, no code** (D8 adapted to Rust) | vendor mailgrep modules (Python only) |
 | 9 | Distribution | **glia-org/importin, Apache-2.0, cargo install + release binaries** (D9) | PyPI |
 | 10 | Read-only | **by construction + source grep test**, no flag (D10) | a `--read-only` switch |
+| 11 | Account labels | **the macOS Accounts database** (`Accounts4.sqlite`, read-only, once at startup), 2026-11-04 final fix wave: the real store's `mailbox://<uuid>/…` URLs carry no address; revises 6, still no JXA | uuids as names; osascript |
