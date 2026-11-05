@@ -186,7 +186,7 @@ claude mcp add --scope user mail -- ~/.cargo/bin/importin
 
 | path | what |
 |---|---|
-| `src/` | the crate, one module per job: `store`, `envelope`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`, `tools`, `doctor`, `config`, `log` |
+| `src/` | the crate, one module per job: `store`, `envelope`, `accounts`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`, `tools`, `doctor`, `config`, `log` |
 | `tests/` | integration tests on a synthetic Mail store built at test time (`tests/support/fixture.rs`); `readonly.rs` greps `src/` for write paths |
 | `checks/budgets.sh` | the latency budgets, release build, 2 000-message fixture |
 | `docs/` | the store format notes, the design panel, the implementation plan |

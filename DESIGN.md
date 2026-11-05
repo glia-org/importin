@@ -10,8 +10,8 @@ Amended 2026-11-05 to match the code as built: §2 (what the read-only test chec
 limits) and §15 (decision 11).
 
 Status: specification, written 2026-11-04 from the decisions in `docs/design-panel-2026-11-04.html` and the
-user's picks of the same day (all recommendations taken; runtime changed to Rust; name Importin). Nothing is
-built yet. The implementation plan follows this document.
+user's picks of the same day (all recommendations taken; runtime changed to Rust; name Importin). Built 2026-11-04 from
+`docs/plan-2026-11-04.md`; amended 2026-11-05 to match the code as shipped in 0.1.0.
 
 ## Name
 
@@ -291,8 +291,9 @@ Dropped from 0.5.0: `get_email_links`, `get_email_attachment` (wrote files to di
   Mail.app running (pgrep), Envelope Index mtime (a lower bound on freshness), ROWID→path resolution on a
   sample (formula hits, walk hits, misses), flag-bit cross-check on a sample, keychain S/MIME identities
   (`security find-identity -v -p smime`, count only), and the **decrypt probe**: the newest enveloped
-  message is decrypted with `security cms -D -n` (content suppressed) and only the exit status and stderr
-  are reported (`--anon`: the status only). `--anon` prints no address, subject, name or path; counts, booleans, timings and hashes only.
+  message is decrypted with `security cms -D -n` (content suppressed; 60 s timeout so the keychain dialog can
+  be clicked) or, with `decryptor = "openssl"`, through the openssl decryptor, and only the exit status and
+  stderr are reported (`--anon`: the status only). `--anon` prints no address, subject, name or path; counts, booleans, timings and hashes only.
   This is the only real-store output Claude sees.
 - `importin --version`.
 
