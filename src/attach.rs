@@ -5,6 +5,9 @@ use std::io::{Cursor, Read};
 use std::iter;
 use std::panic::{self, UnwindSafe};
 use std::path::Path;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use calamine::{Cell, Data, DataRef, Reader as _, Sheets, XlsxError};
 use quick_xml::Reader;
@@ -17,6 +20,9 @@ use crate::mime::{self, AttachmentState};
 
 /// The note for a zip that inflates, or declares it inflates, past `MAX_EMLX_BYTES`.
 const TOO_LARGE: &str = "attachment inflates past the 64 MiB limit";
+
+/// How long `pdf_extract`, which has no limit of its own, may take: a crafted PDF can make it spin.
+const PDF_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// No `Debug`: the text may come from a decrypted message.
 #[derive(Serialize)]
@@ -43,9 +49,12 @@ enum Kind {
 /// `read::attachment_text` sets the selected attachment's state.
 pub fn extract(bytes: &[u8], filename: &str, mime_type: &str, max_chars: usize) -> Extracted {
     let (text, note) = match kind(filename, mime_type) {
-        Kind::Pdf => guarded("pdf", || {
-            pdf_extract::extract_text_from_mem(bytes).map_err(|e| e.to_string())
-        }),
+        Kind::Pdf => {
+            let bytes = bytes.to_vec();
+            timed("pdf", PDF_TIMEOUT, move || {
+                pdf_extract::extract_text_from_mem(&bytes).map_err(|e| e.to_string())
+            })
+        }
         Kind::Docx => guarded("docx", || docx(bytes)),
         Kind::Sheet => guarded("spreadsheet", || sheets(bytes, max_chars)),
         Kind::Pptx => guarded("pptx", || pptx(bytes)),
@@ -117,6 +126,31 @@ fn guarded(
         String::new(),
         Some(format!("{kind} extraction failed: {why}")),
     )
+}
+
+/// [`guarded`] on a thread of its own; past `limit`, empty text and the note "<kind> extraction
+/// exceeded <limit> s". A thread cannot be killed: one that overruns is left running in the
+/// background, holding its input and whatever it allocated, until `f` returns. Nothing joins it,
+/// so each overrun leaks a thread for as long as it runs.
+fn timed(
+    kind: &'static str,
+    limit: Duration,
+    f: impl FnOnce() -> Result<String, String> + UnwindSafe + Send + 'static,
+) -> (String, Option<String>) {
+    let (tx, rx) = mpsc::channel();
+    if let Err(e) = thread::Builder::new().spawn(move || tx.send(guarded(kind, f))) {
+        return (
+            String::new(),
+            Some(format!("{kind} extraction failed: {e}")),
+        );
+    }
+    rx.recv_timeout(limit).unwrap_or_else(|_| {
+        let secs = limit.as_secs();
+        (
+            String::new(),
+            Some(format!("{kind} extraction exceeded {secs} s")),
+        )
+    })
 }
 
 /// `<w:t>` text of `word/document.xml`, a newline after each paragraph.
@@ -300,13 +334,36 @@ fn xml_text(xml: &str, text: &str, para: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Write};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
-    use super::{guarded, pptx, xml_text};
+    use super::{guarded, pptx, timed, xml_text};
 
     #[test]
     fn a_parser_panic_becomes_a_note() {
         let (text, note) = guarded("pdf", || panic!("bad xref"));
         assert_eq!(text, "");
+        assert_eq!(note.as_deref(), Some("pdf extraction failed: bad xref"));
+    }
+
+    #[test]
+    fn an_extraction_past_its_limit_gives_a_note() {
+        let start = Instant::now();
+        let (text, note) = timed("pdf", Duration::from_secs(1), || {
+            thread::sleep(Duration::from_secs(60));
+            Ok("late".into())
+        });
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            start.elapsed()
+        );
+        assert_eq!(text, "");
+        assert_eq!(note.as_deref(), Some("pdf extraction exceeded 1 s"));
+
+        let within = timed("pdf", Duration::from_secs(5), || Ok("text".into()));
+        assert_eq!(within, ("text".to_string(), None));
+        let (_, note) = timed("pdf", Duration::from_secs(5), || panic!("bad xref"));
         assert_eq!(note.as_deref(), Some("pdf extraction failed: bad xref"));
     }
 
