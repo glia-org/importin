@@ -516,6 +516,33 @@ fn strip_html_basic() {
 }
 
 #[test]
+fn strip_html_separates_cells_and_blocks() {
+    use mime::strip_html;
+    assert_eq!(
+        strip_html("<table><tr><td>a</td><td>b</td></tr><tr><th>c</th><th>d</th></tr></table>"),
+        "a b\nc d"
+    );
+    assert_eq!(strip_html("intro<p>para</p>outro"), "intro\npara\noutro");
+    assert_eq!(strip_html("<div>a<div>b</div></div>"), "a\nb");
+    assert_eq!(strip_html("x<h1>T</h1>y"), "x\nT\ny");
+    assert_eq!(
+        strip_html("a<table><tr><td>b</td></tr></table>c"),
+        "a\nb\nc"
+    );
+    assert_eq!(strip_html("a <li>b"), "a\nb");
+    assert_eq!(strip_html("a<br><br><br><br>b"), "a\n\nb");
+}
+
+#[test]
+fn strip_html_drops_title() {
+    use mime::strip_html;
+    assert_eq!(
+        strip_html("<html><head><TITLE>Newsletter 42</TITLE></head><body><p>hi</p></body></html>"),
+        "hi"
+    );
+}
+
+#[test]
 fn strip_html_decodes_named_entities() {
     use mime::strip_html;
     assert_eq!(strip_html("Gr&uuml;&szlig;e &euro; &rsquo;"), "Grüße € ’");
