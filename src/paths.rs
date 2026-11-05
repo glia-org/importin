@@ -143,7 +143,12 @@ fn rowid_of(name: &str) -> Option<i64> {
     stem.parse().ok()
 }
 
-/// Every emlx under the `Data` trees of the given mailbox dirs, in order; the first path per ROWID wins.
+fn is_partial(path: &str) -> bool {
+    path.ends_with(".partial.emlx")
+}
+
+/// Every emlx under the `Data` trees of the given mailbox dirs, in order; the first path per ROWID
+/// wins, except that an `.emlx` replaces a `.partial.emlx` found before it.
 fn walk(mailbox_dirs: &[PathBuf]) -> Result<HashMap<i64, PathBuf>, PathError> {
     let mut files = HashMap::new();
     for data in mailbox_dirs.iter().flat_map(|d| store_dirs(d)) {
@@ -168,9 +173,13 @@ fn walk(mailbox_dirs: &[PathBuf]) -> Result<HashMap<i64, PathBuf>, PathError> {
                     stack.push(entry.path());
                 } else if kind.is_file()
                     && in_messages
-                    && let Some(rowid) = name.to_str().and_then(rowid_of)
+                    && let Some(name) = name.to_str()
+                    && let Some(rowid) = rowid_of(name)
                 {
-                    files.entry(rowid).or_insert_with(|| entry.path());
+                    let found = files.entry(rowid).or_insert_with(|| entry.path());
+                    if !is_partial(name) && found.to_str().is_some_and(is_partial) {
+                        *found = entry.path();
+                    }
                 }
             }
         }
