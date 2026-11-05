@@ -2,10 +2,11 @@
 //! document that cannot be read gives empty text and a note, never an error or a panic.
 
 use std::io::{Cursor, Read};
+use std::iter;
 use std::panic::{self, UnwindSafe};
 use std::path::Path;
 
-use calamine::Reader as _;
+use calamine::{Cell, Data, DataRef, Reader as _, Sheets, XlsxError};
 use quick_xml::Reader;
 use quick_xml::events::Event;
 use serde::Serialize;
@@ -46,7 +47,7 @@ pub fn extract(bytes: &[u8], filename: &str, mime_type: &str, max_chars: usize) 
             pdf_extract::extract_text_from_mem(bytes).map_err(|e| e.to_string())
         }),
         Kind::Docx => guarded("docx", || docx(bytes)),
-        Kind::Sheet => guarded("spreadsheet", || sheets(bytes)),
+        Kind::Sheet => guarded("spreadsheet", || sheets(bytes, max_chars)),
         Kind::Pptx => guarded("pptx", || pptx(bytes)),
         Kind::Html => (mime::strip_html(&String::from_utf8_lossy(bytes)), None),
         Kind::Text => (String::from_utf8_lossy(bytes).into_owned(), None),
@@ -125,8 +126,9 @@ fn docx(bytes: &[u8]) -> Result<String, String> {
     xml_text(&xml, "w:t", "w:p")
 }
 
-/// `== <sheet>`, then one line per row, cells tab-separated.
-fn sheets(bytes: &[u8]) -> Result<String, String> {
+/// `== <sheet>`, then one line per row, cells tab-separated. Stops after the sheet that takes the
+/// text past `max_chars`.
+fn sheets(bytes: &[u8], max_chars: usize) -> Result<String, String> {
     // calamine inflates the parts itself; zip refuses to inflate an entry past its declared size,
     // so the declared sizes of a zip workbook (xlsx, xlsb, ods) bound what calamine reads. xls is
     // not a zip.
@@ -140,19 +142,91 @@ fn sheets(bytes: &[u8]) -> Result<String, String> {
             return Err(TOO_LARGE.into());
         }
     }
+    // A char takes at most 4 bytes: past `limit` bytes the text is cut at `max_chars` anyway.
+    let limit = max_chars.saturating_mul(4);
     let mut book =
         calamine::open_workbook_auto_from_rs(Cursor::new(bytes)).map_err(|e| e.to_string())?;
     let mut out = String::new();
     for name in book.sheet_names() {
-        let range = book.worksheet_range(&name).map_err(|e| e.to_string())?;
-        out += &format!("== {name}\n");
-        for row in range.rows() {
-            let cells: Vec<String> = row.iter().map(ToString::to_string).collect();
-            out += &cells.join("\t");
-            out.push('\n');
+        if out.len() > limit {
+            break;
+        }
+        match &mut book {
+            // `worksheet_range` is dense over the bounding box of the cells: values at A1 and
+            // XFD1048576 make 17 billion cells, and a failed allocation aborts past catch_unwind.
+            // calamine has no cell reader for xls (dense already at open) or ods.
+            Sheets::Xlsx(x) => {
+                let cells = match x.worksheet_cells_reader(&name) {
+                    Ok(mut r) => used(|| r.next_cell())?,
+                    // A chart sheet, as `worksheet_range` has it.
+                    Err(XlsxError::NotAWorksheet(_)) => Vec::new(),
+                    Err(e) => return Err(e.to_string()),
+                };
+                out += &format!("== {name}\n");
+                sparse_rows(&mut out, cells, limit);
+            }
+            Sheets::Xlsb(x) => {
+                let mut r = x.worksheet_cells_reader(&name).map_err(|e| e.to_string())?;
+                let cells = used(|| r.next_cell())?;
+                out += &format!("== {name}\n");
+                sparse_rows(&mut out, cells, limit);
+            }
+            book => {
+                let range = book.worksheet_range(&name).map_err(|e| e.to_string())?;
+                out += &format!("== {name}\n");
+                for row in range.rows() {
+                    let cells: Vec<String> = row.iter().map(ToString::to_string).collect();
+                    out += &cells.join("\t");
+                    out.push('\n');
+                }
+            }
         }
     }
     Ok(out)
+}
+
+/// The non-empty cells `next` gives, in file order.
+fn used<'a, E: ToString>(
+    mut next: impl FnMut() -> Result<Option<Cell<DataRef<'a>>>, E>,
+) -> Result<Vec<Cell<DataRef<'a>>>, String> {
+    let mut cells = Vec::new();
+    while let Some(cell) = next().map_err(|e| e.to_string())? {
+        if *cell.get_value() != DataRef::Empty {
+            cells.push(cell);
+        }
+    }
+    Ok(cells)
+}
+
+/// One line per row that holds a value, in row and column order. A value follows one tab per
+/// column it lies right of the leftmost value of the sheet (or of the value before it), as in
+/// `worksheet_range`'s rows; rows without a value and trailing empty cells are left out. Stops once
+/// `out` is past `limit` bytes.
+fn sparse_rows(out: &mut String, mut cells: Vec<Cell<DataRef>>, limit: usize) {
+    cells.sort_by_key(Cell::get_position);
+    let left = cells.iter().map(|c| c.get_position().1).min().unwrap_or(0);
+    let mut prev: Option<(u32, u32)> = None;
+    for cell in cells {
+        let (row, col) = cell.get_position();
+        let from = match prev {
+            Some((r, c)) if r == row => c,
+            Some(_) => {
+                out.push('\n');
+                left
+            }
+            None => left,
+        };
+        // calamine does not bound the column: ZZZZZZ1 is 321 million columns right of A1.
+        out.extend(iter::repeat_n('\t', ((col - from) as usize).min(limit)));
+        *out += &Data::from(cell.get_value().clone()).to_string();
+        if out.len() > limit {
+            return;
+        }
+        prev = Some((row, col));
+    }
+    if prev.is_some() {
+        out.push('\n');
+    }
 }
 
 /// `== slide N`, then the `<a:t>` text of `ppt/slides/slideN.xml`, a newline after each paragraph.

@@ -3,6 +3,7 @@ mod support;
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 use importin::attach;
 use importin::config::{self, Config, DecryptorKind};
@@ -80,6 +81,53 @@ fn xlsx_text() {
     let e = attach::extract(&fixture::xlsx(), "a.xlsx", XLSX, 20_000);
     assert_eq!(e.text, "== Sheet1\nxlsx sentence\n", "note: {:?}", e.note);
     assert_eq!(e.note, None);
+}
+
+#[test]
+fn xlsx_far_apart_cells_are_read_one_by_one() {
+    // A dense range over A1 and XFD1048576 would hold 17 billion cells.
+    let xlsx = fixture::xlsx_with_rows(
+        "<row r=\"1\"><c r=\"A1\" t=\"inlineStr\"><is><t>a</t></is></c></row>\
+         <row r=\"1048576\"><c r=\"XFD1048576\" t=\"inlineStr\"><is><t>b</t></is></c></row>",
+    );
+    let start = Instant::now();
+    let e = attach::extract(&xlsx, "a.xlsx", XLSX, 20_000);
+    assert!(
+        start.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        start.elapsed()
+    );
+    assert_eq!(e.note, None);
+    assert_eq!(e.text, format!("== Sheet1\na\n{}b\n", "\t".repeat(16_383)));
+    assert!(!e.truncated);
+}
+
+#[test]
+fn xlsx_rows_sorted_from_the_leftmost_column_without_empty_rows() {
+    let xlsx = fixture::xlsx_with_rows(
+        "<row r=\"3\"><c r=\"D3\"><v>3</v></c><c r=\"B3\"><v>2</v></c></row>\
+         <row r=\"1\"><c r=\"B1\" t=\"inlineStr\"><is><t>x</t></is></c><c r=\"C1\"/></row>",
+    );
+    let e = attach::extract(&xlsx, "a.xlsx", XLSX, 20_000);
+    assert_eq!(e.text, "== Sheet1\nx\n2\t\t3\n", "note: {:?}", e.note);
+}
+
+#[test]
+fn xlsx_column_far_past_xfd_stops_at_max_chars() {
+    // ZZZZZZ is column 321 272 406; calamine does not bound it.
+    let xlsx = fixture::xlsx_with_rows(
+        "<row r=\"1\"><c r=\"A1\"><v>1</v></c><c r=\"ZZZZZZ1\"><v>2</v></c></row>",
+    );
+    let start = Instant::now();
+    let e = attach::extract(&xlsx, "a.xlsx", XLSX, 500);
+    assert!(
+        start.elapsed() < Duration::from_secs(1),
+        "{:?}",
+        start.elapsed()
+    );
+    assert_eq!(e.note, None);
+    assert!(e.truncated);
+    assert_eq!(e.text, format!("== Sheet1\n1{}", "\t".repeat(489)));
 }
 
 #[test]
