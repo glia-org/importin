@@ -189,8 +189,10 @@ Found while writing the docs:
    body scan 5 hits after 192 of 500 candidates in 91 ms, thread 1 ms. The opencode Qwen session
    "importin smoke 2026-11-04" ran (13 k input / 459 output tokens); its transcript was not read by
    Claude (classifier), the user checks it in the TUI.
-3. Done 2026-11-05: repo pushed, CI green, `v0.1.0` tagged (release workflow: build matrix uploads
-   artifacts, one release job publishes both zips). Still open: `cargo publish` needs the user's crates.io
+3. Done 2026-11-05: repo pushed, CI green, `v0.1.0` tagged. Release workflow: one macOS job builds both
+   targets and uploads the zips, one Ubuntu job publishes the release; `workflow_dispatch` with `tag=`
+   rebuilds an existing tag (`gh workflow run release.yml -f tag=v0.1.0`) when a run is lost to runner
+   capacity (on 2026-11-05 the arm64 runner was not acquired four times in a row during a GitHub incident). Still open: `cargo publish` needs the user's crates.io
    token; a public repo needs a decision on the mailbox statistics in `docs/store-format.md`.
 4. Before `cargo publish`: the release workflow runs on the first `v*` tag once the repo is on GitHub
    (`Cargo.toml` now carries `license`, `description`, `repository`, `keywords`, `categories`, `readme`).
