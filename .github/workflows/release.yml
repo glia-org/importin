@@ -4,9 +4,6 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
-
 jobs:
   build:
     strategy:
@@ -16,10 +13,25 @@ jobs:
     env:
       ZIP: importin-${{ github.ref_name }}-${{ matrix.target }}.zip
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --release --locked --target ${{ matrix.target }}
       - run: zip -j "$ZIP" "target/${{ matrix.target }}/release/importin" README.md LICENSE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: importin-${{ matrix.target }}
+          path: ${{ env.ZIP }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: ${{ env.ZIP }}
+          files: dist/*.zip
