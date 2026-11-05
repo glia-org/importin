@@ -1,8 +1,15 @@
 # Handoff
 
-## State (2026-11-04)
+## State (2026-11-05)
 
-Branch `impl`. Implementation tasks 1–11 of [`docs/plan-2026-11-04.md`](docs/plan-2026-11-04.md) are
+Branch `main`, pushed to `github.com/glia-org/importin` (private), CI green, tag `v0.1.0` builds the
+release zips. In use: `~/.cargo/bin/importin` serves the opencode `mail` agent. On 2026-11-05 the open
+items below were closed (sparse xlsx reading, 20 s limits on pdf and spreadsheet parsing, xls/ods no
+longer read, Unicode case folding in header search, `.emlx` preferred over `.partial.emlx`, `strip_html`
+cell and block spacing and `<title>` dropped, the release workflow's two-job race, DESIGN brought in line
+with the code). `cargo test`: 186 passed, 1 ignored. The paragraph that follows is the 2026-11-04 state.
+
+Implementation tasks 1–11 of [`docs/plan-2026-11-04.md`](docs/plan-2026-11-04.md) are
 done: the crate (`store`, `envelope`, `accounts`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`,
 `tools`, `doctor`, `config`, `log`), the binary (`importin`, `importin serve`, `importin doctor [--anon]
 [--json]`, `importin --version`), the read-only source grep, the budget check, the docs and the release
@@ -61,11 +68,16 @@ freshly built binary costs ~0.7 s before `main` on macOS (a policy check), hence
 
 ## Known gaps
 
-- **Residual from the final review (not fixed):** calamine's `worksheet_range` allocates rows × cols cells;
-  a ~1 KB xlsx with cells at A1 and XFD1048576 passes the zip-size guard and can abort the process on
-  allocation failure, which `catch_unwind` cannot catch. Fix: cap the cell count before
-  `worksheet_range` or read the sheet dimension first. Until then a hostile spreadsheet attachment can take
-  the server down (opencode restarts it; nothing is written or leaked).
+- **Parser threads that overrun are not killed.** pdf and spreadsheet parsing run on a thread with a
+  20 s limit (`attach::timed`); past it the attachment gets a note, but the thread keeps running until the
+  parser returns, holding its input (≤ 64 MiB). Repeated crafted attachments pile such threads up with no
+  cap. The lasting fix is a child process that can be killed. The calamine dense-range abort
+  (A1 + XFD1048576) is fixed for xlsx/xlsb by reading cells sparsely; xls and ods are no longer parsed
+  because calamine has no sparse path for them.
+- **Two-codepoint HTML5 entities** (`&NotEqualTilde;`, `&fjlig;`, …) decode to their first codepoint:
+  mail-parser's entity table stores one `u32` per name. Left as is; such entities do not occur in mail.
+- **xlsb** is read through the same cell reader as xlsx but has no fixture; a malformed xlsb reports the
+  xlsx open error.
 
 Collected from the review ledger (`.superpowers/sdd/plan-2026-11-04/progress.md`, kept out of git), the
 `minor (deferred)` lines as written, by task.
@@ -107,7 +119,7 @@ Collected from the review ledger (`.superpowers/sdd/plan-2026-11-04/progress.md`
 
 **Task 8**
 
-- zip/xlsx inflated-size not bounded; pdf_extract has no time limit; catch_unwind relies on panic=unwind in the release profile (do not set panic=abort).
+- zip/xlsx inflated-size not bounded; pdf_extract has no time limit (both since fixed); catch_unwind relies on panic=unwind in the release profile (do not set panic=abort).
 - slide ordering untested (fix round adds it); encrypted test skips silently without openssl; unbounded zip entry decompression; unknown XML entities dropped silently.
 - search's body_text still has its own locate/read/parse copy.
 
@@ -123,6 +135,11 @@ Collected from the review ledger (`.superpowers/sdd/plan-2026-11-04/progress.md`
 - doctor tests spawn `security find-identity` (not hermetic); missing tests for failing probe / FAIL rows / security branch; scrub over-redacts "ProtonMail/".
 - a certificate name on the first stderr line of the security probe would still show under --anon (status code suffices; consider dropping stderr entirely under anon in the final wave).
 - scrub word-start set lacks < [ { ; and relative ../ paths; \r not a line end; cert CN on first stderr line survives; anon_probe_stderr test vacuous without openssl.
+
+Since resolved (2026-11-05): ASCII-only LIKE case folding (Task 3; `ulower()` scalar function, `rusqlite`
+`functions` feature), the walk taking a `.partial.emlx` over the `.emlx` (Task 4), `strip_html` running
+words together at `</td>` and block tags and leaking `<title>` (Task 5), the whitespace-split `openssl()`
+test helper (Task 6), the calamine dense-range abort and the unbounded pdf time (Task 8).
 
 Since resolved: the `immutable=1` check (Task 2) is `tests/readonly.rs`; `config.rs`'s rustfmt drift
 (Tasks 4, 6, 7) went in `style: cargo fmt`; the empty-query body scan and the `body_scan_days` cap (Task 7)
@@ -172,5 +189,8 @@ Found while writing the docs:
    body scan 5 hits after 192 of 500 candidates in 91 ms, thread 1 ms. The opencode Qwen session
    "importin smoke 2026-11-04" ran (13 k input / 459 output tokens); its transcript was not read by
    Claude (classifier), the user checks it in the TUI.
-3. Before `cargo publish`: the release workflow runs on the first `v*` tag once the repo is on GitHub
+3. Done 2026-11-05: repo pushed, CI green, `v0.1.0` tagged (release workflow: build matrix uploads
+   artifacts, one release job publishes both zips). Still open: `cargo publish` needs the user's crates.io
+   token; a public repo needs a decision on the mailbox statistics in `docs/store-format.md`.
+4. Before `cargo publish`: the release workflow runs on the first `v*` tag once the repo is on GitHub
    (`Cargo.toml` now carries `license`, `description`, `repository`, `keywords`, `categories`, `readme`).

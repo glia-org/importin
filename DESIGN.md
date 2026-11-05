@@ -258,8 +258,11 @@ without the column) comes back alone; an unknown or excluded `id` is a tool erro
 
 Args: `id`, `filename` (exactly as listed) or `index` (used when `filename` is absent or matches none),
 `max_chars` (500–100 000, default 20 000). Returns `{filename, mime_type, state, text, truncated, note}`.
-Text from (by extension first, then MIME type): PDF (pdf-extract, panics caught), docx
-(`word/document.xml` `<w:t>`), xlsx/xls/xlsb/ods (calamine, sheet by sheet, tab-separated), pptx
+Text from (by extension first, then MIME type): PDF (pdf-extract on a thread of its own, panics caught,
+20 s limit), docx (`word/document.xml` `<w:t>`), xlsx/xlsb (calamine's cell readers, sheet by sheet,
+tab-separated; rows without a value and trailing empty cells left out; stops past 4 × `max_chars` bytes;
+20 s limit; xls and ods are not read, calamine builds them as dense ranges and a crafted file would abort
+the process), pptx
 (`ppt/slides/slide*.xml` `<a:t>`), HTML (stripped), `text/*` and `.txt`/`.md`/`.csv`. Images and
 everything else: empty `text` and a one-line `note` with the type and size; a document that fails to
 parse gives empty `text` and a `note`, not an error. `not_downloaded` → error "<filename> was never
@@ -389,7 +392,7 @@ only speed up, never hide, a message.
 | # | decision | picked | alternatives (panel D-numbers) |
 |---|---|---|---|
 | 1 | Name | **Importin**, the user, 2026-11-04, after the cell-biology round | sensillum, caveola, pinosome, podocyte; paper-knife (panel D1, rejected: not in the family) |
-| 2 | Runtime | **Rust**, the user, 2026-11-04 ("can we use rust because its pretty fast?"): rmcp, rusqlite, mail-parser, plist, calamine, pdf-extract | Python + uv (panel D2's recommendation), Swift, Node |
+| 2 | Runtime | **Rust**, the user, 2026-11-04, for speed: rmcp, rusqlite, mail-parser, plist, calamine, pdf-extract | Python + uv (panel D2's recommendation), Swift, Node |
 | 3 | Metadata source | **live read-only Envelope Index**, no own index (D3) | snapshot copy per query; own mirror + watcher |
 | 4 | Body search | **bounded on-demand scan**, phase 1 (D4 A); FTS accelerator only as phase 2 | eager index (today) |
 | 5 | S/MIME | **`security cms -D` subprocess**, openssl PEM fallback (D5 A + C) | in-process CMSDecoder (`security-framework` has it; possible later once the binary is signed with a stable certificate) |
