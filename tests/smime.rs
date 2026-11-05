@@ -41,16 +41,16 @@ fn openssl_with(keys: &SmimeKeys) -> OpensslCli {
     }
 }
 
-/// Run `openssl` in `dir`; no argument may contain a space.
-fn openssl(dir: &Path, cmd: &str) {
+/// Run `openssl` with `args` in `dir`.
+fn openssl(dir: &Path, args: &[&str]) {
     let out = Command::new("openssl")
-        .args(cmd.split_whitespace())
+        .args(args)
         .current_dir(dir)
         .output()
         .unwrap();
     assert!(
         out.status.success(),
-        "openssl {cmd}: {}",
+        "openssl {args:?}: {}",
         String::from_utf8_lossy(&out.stderr)
     );
 }
@@ -121,7 +121,21 @@ fn wrong_key_is_failed_not_panic() {
     let dir = tempfile::tempdir().unwrap();
     openssl(
         dir.path(),
-        "req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=other -keyout other.key -out other.crt",
+        &[
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-days",
+            "1",
+            "-subj",
+            "/CN=other",
+            "-keyout",
+            "other.key",
+            "-out",
+            "other.crt",
+        ],
     );
     let d = OpensslCli {
         bin: "openssl".into(),
@@ -170,14 +184,36 @@ fn opaque_signed_inner_is_decoded() {
         "Content-Type: text/plain; charset=utf-8\n\nthe opaque sentence\n",
     )
     .unwrap();
-    let (key, cert) = (keys.key.display(), keys.cert.display());
+    let (key, cert) = (keys.key.to_str().unwrap(), keys.cert.to_str().unwrap());
     openssl(
         dir.path(),
-        &format!("cms -sign -nodetach -signer {cert} -inkey {key} -in inner.eml -out opaque.eml"),
+        &[
+            "cms",
+            "-sign",
+            "-nodetach",
+            "-signer",
+            cert,
+            "-inkey",
+            key,
+            "-in",
+            "inner.eml",
+            "-out",
+            "opaque.eml",
+        ],
     );
     openssl(
         dir.path(),
-        &format!("cms -encrypt -aes256 -recip {cert} -in opaque.eml -out enc.eml"),
+        &[
+            "cms",
+            "-encrypt",
+            "-aes256",
+            "-recip",
+            cert,
+            "-in",
+            "opaque.eml",
+            "-out",
+            "enc.eml",
+        ],
     );
     let raw = fs::read(dir.path().join("enc.eml")).unwrap();
     let parsed = mime::parse(&raw).unwrap();
@@ -195,12 +231,24 @@ fn tampered_signed_der(keys: &SmimeKeys, dir: &Path) -> Vec<u8> {
         "Content-Type: text/plain\n\nthe signed sentence\n",
     )
     .unwrap();
-    let (key, cert) = (keys.key.display(), keys.cert.display());
+    let (key, cert) = (keys.key.to_str().unwrap(), keys.cert.to_str().unwrap());
     openssl(
         dir,
-        &format!(
-            "cms -sign -nodetach -outform DER -signer {cert} -inkey {key} -in inner.eml -out signed.der"
-        ),
+        &[
+            "cms",
+            "-sign",
+            "-nodetach",
+            "-outform",
+            "DER",
+            "-signer",
+            cert,
+            "-inkey",
+            key,
+            "-in",
+            "inner.eml",
+            "-out",
+            "signed.der",
+        ],
     );
     let mut der = fs::read(dir.join("signed.der")).unwrap();
     let at = der

@@ -254,6 +254,33 @@ fn falls_back_to_walk_when_formula_misses() {
     );
 }
 
+/// Each ROWID gets its `.emlx` in one wrong shard and a `.partial.emlx` copy in the other, the two
+/// ROWIDs the other way round, so whichever shard the walk reaches first, one of them sees its
+/// partial file first.
+#[test]
+fn walk_prefers_emlx_over_partial() {
+    let fx = fixture::build(Epoch::Unix);
+    let loc = Locator::new(store_of(&fx));
+    for (id, full, partial) in [(fx.ids.plain, "9", "8"), (fx.ids.html_only, "8", "9")] {
+        let u = url(&fx, id);
+        let moved = move_to_shard(&locate(&loc, id, &u).emlx, full);
+        let data = moved.ancestors().nth(3).unwrap();
+        let dir = data.join(partial).join("Messages");
+        fs::create_dir_all(&dir).unwrap();
+        fs::copy(&moved, dir.join(format!("{id}.partial.emlx"))).unwrap();
+    }
+    let loc = Locator::new(store_of(&fx));
+    for (id, full) in [(fx.ids.plain, "9"), (fx.ids.html_only, "8")] {
+        let l = locate(&loc, id, &url(&fx, id));
+        assert_eq!(l.by, Resolution::Walk);
+        assert!(
+            l.emlx.ends_with(format!("Data/{full}/Messages/{id}.emlx")),
+            "{:?}",
+            l.emlx
+        );
+    }
+}
+
 /// Caches the walk of INBOX through a miss for an absent ROWID, plants that ROWID's file in a wrong
 /// shard, checks the cached miss still answers `None` (no walk per miss), then touches `stamp_file`
 /// and checks the next lookup walks again and finds it.

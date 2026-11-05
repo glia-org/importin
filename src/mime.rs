@@ -441,10 +441,11 @@ pub(crate) fn truncate(mut text: String, max_chars: usize) -> (String, bool) {
     }
 }
 
-/// HTML to plain text: `<script>`/`<style>` dropped with their content, comments dropped, `<br>` and
-/// the closing tags of p, div, li, tr and h1–h6 become a newline, other tags vanish; then entities
-/// are decoded, runs of spaces and tabs collapse to one space, lines are trimmed, at most one blank
-/// line is kept, and the result is trimmed.
+/// HTML to plain text: `<script>`/`<style>`/`<title>` dropped with their content, comments dropped,
+/// `<br>` becomes a newline, the opening and closing tags of p, div, li, tr, table and h1–h6 start a
+/// new line unless one has just begun, `</td>` and `</th>` become a space, other tags vanish; then
+/// entities are decoded, runs of spaces and tabs collapse to one space, lines are trimmed, at most
+/// one blank line is kept, and the result is trimmed.
 pub fn strip_html(html: &str) -> String {
     // ASCII lowercasing keeps every byte offset.
     let lower = html.to_ascii_lowercase();
@@ -473,7 +474,7 @@ pub fn strip_html(html: &str) -> String {
             continue;
         }
         let end = rest.find('>').map_or(html.len(), |e| start + e + 1);
-        if !closing && (name == "script" || name == "style") {
+        if !closing && matches!(name.as_str(), "script" | "style" | "title") {
             let close = format!("</{name}");
             i = match lower[end..].find(&close) {
                 Some(c) => {
@@ -486,10 +487,17 @@ pub fn strip_html(html: &str) -> String {
         }
         let block = matches!(
             name.as_str(),
-            "p" | "div" | "li" | "tr" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+            "p" | "div" | "li" | "tr" | "table" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
         );
-        if name == "br" || (closing && block) {
+        if name == "br" {
             out.push('\n');
+        } else if block {
+            let line = out.trim_end_matches([' ', '\t', '\r']);
+            if !line.is_empty() && !line.ends_with('\n') {
+                out.push('\n');
+            }
+        } else if closing && (name == "td" || name == "th") {
+            out.push(' ');
         }
         i = end;
     }
