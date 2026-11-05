@@ -3,24 +3,33 @@ name: release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: existing v* tag to build and release
+        required: true
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  # One macOS runner builds both targets: a second job doubles the wait for a runner.
   build:
-    strategy:
-      matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
     runs-on: macos-latest
-    env:
-      ZIP: importin-${{ github.ref_name }}-${{ matrix.target }}.zip
     steps:
       - uses: actions/checkout@v5
-      - run: rustup target add ${{ matrix.target }}
-      - run: cargo build --release --locked --target ${{ matrix.target }}
-      - run: zip -j "$ZIP" "target/${{ matrix.target }}/release/importin" README.md LICENSE
+        with:
+          ref: ${{ env.TAG }}
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: |
+          for target in aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo build --release --locked --target "$target"
+            zip -j "importin-$TAG-$target.zip" "target/$target/release/importin" README.md LICENSE
+          done
       - uses: actions/upload-artifact@v4
         with:
-          name: importin-${{ matrix.target }}
-          path: ${{ env.ZIP }}
+          name: importin-zips
+          path: importin-*.zip
 
   release:
     needs: build
@@ -30,8 +39,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
+          name: importin-zips
           path: dist
-          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.TAG }}
           files: dist/*.zip
