@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Importin, a read-only MCP server for Apple Mail</title>
+<meta name="description" content="Importin reads what Mail.app already keeps on this Mac and gives an AI agent six tools to find and read it, S/MIME-encrypted messages included. It cannot send, move, flag or delete mail.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#13131b">
+<link rel="canonical" href="https://glia-org.github.io/importin/">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css">
+<!-- Decisions A V2 P1 C2 S1 H1 M1 R2 from docs/design-panel-website-2026-11-06.html; the rules are in site/README.md.
+     Every claim is of the build as released (v0.1.0) and comes from README.md. Plain static files: no build step, no
+     script, no third-party requests. The pore below is inline SVG with CSS keyframes (assets/site.css). -->
+</head>
+<body>
+<header class="top wrap">
+  <p class="brand"><svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><g transform="translate(16 16)"><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(45)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(90)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(135)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(180)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(225)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(270)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(315)"/><circle r="3"/></g></svg>Importin</p>
+  <nav aria-label="Project"><a href="https://github.com/glia-org/importin">Source</a><a href="https://github.com/glia-org/importin/releases">Releases</a></nav>
+</header>
+
+<main class="wrap">
+  <section class="lead" aria-labelledby="lead-h">
+    <h1 id="lead-h">A read-only MCP server for Apple Mail</h1>
+    <div class="lead-copy">
+      <p>Importin reads what Mail.app already keeps on this Mac and gives an AI agent six tools to find and read it, S/MIME-encrypted messages included. It cannot send, move, flag or delete mail.</p>
+      <p class="get"><a class="btn" href="https://github.com/glia-org/importin/releases/latest">Download</a><span>A zip for Apple Silicon or for Intel; the binary is not notarised. <a class="nw" href="https://github.com/glia-org/importin">Source on GitHub</a>.</span></p>
+    </div>
+  </section>
+
+  <figure class="plate" id="pore">
+    <svg viewBox="-380 -140 760 280" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Drawing: a nuclear pore seen from the cytoplasm, a ring of eight subunits among smaller pores. Four letters, each with an address tag and held by an importin, move in toward the centre and pass through the pore one after another. Nothing moves outward.">
+      <defs>
+        <rect id="p-sb" x="-12" y="-86" width="24" height="40" rx="10"/>
+        <path id="p-fg" d="M0-50q5 7 0 13t0 13t0 11"/>
+        <g id="p-np">
+          <circle class="p-rim" r="94"/>
+          <circle class="p-chan" r="52"/>
+          <g class="p-mesh"><use href="#p-fg" transform="rotate(22.5)"/><use href="#p-fg" transform="rotate(67.5)"/><use href="#p-fg" transform="rotate(112.5)"/><use href="#p-fg" transform="rotate(157.5)"/><use href="#p-fg" transform="rotate(202.5)"/><use href="#p-fg" transform="rotate(247.5)"/><use href="#p-fg" transform="rotate(292.5)"/><use href="#p-fg" transform="rotate(337.5)"/></g>
+          <g class="p-sub"><use href="#p-sb"/><use href="#p-sb" transform="rotate(45)"/><use href="#p-sb" transform="rotate(90)"/><use href="#p-sb" transform="rotate(135)"/><use href="#p-sb" transform="rotate(180)"/><use href="#p-sb" transform="rotate(225)"/><use href="#p-sb" transform="rotate(270)"/><use href="#p-sb" transform="rotate(315)"/></g>
+        </g>
+        <g id="p-env" transform="scale(1.2)"><path class="p-imp" d="M-15 10Q0 22 15 10"/><rect class="p-box" x="-12" y="-8" width="24" height="16" rx="2"/><path class="p-flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="p-str" d="M9-5.5 14.5-12"/><rect class="p-tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g>
+      </defs>
+      <rect class="p-field" x="-380" y="-140" width="760" height="280"/>
+      <g class="p-far">
+        <use href="#p-np" transform="translate(-318 88) scale(.3)"/>
+        <use href="#p-np" transform="translate(-292 -96) scale(.2)"/>
+        <use href="#p-np" transform="translate(-196 104) scale(.24)"/>
+        <use href="#p-np" transform="translate(-84 -120) scale(.15)"/>
+        <use href="#p-np" transform="translate(126 116) scale(.16)"/>
+        <use href="#p-np" transform="translate(212 -92) scale(.22)"/>
+        <use href="#p-np" transform="translate(322 -38) scale(.26)"/>
+        <use href="#p-np" transform="translate(300 106) scale(.2)"/>
+      </g>
+      <use href="#p-np"/>
+      <circle class="p-rel r1" r="5"/><circle class="p-rel r2" r="5"/><circle class="p-rel r3" r="5"/><circle class="p-rel r4" r="5"/>
+      <use class="cargo c1" href="#p-env"/><use class="cargo c2" href="#p-env"/><use class="cargo c3" href="#p-env"/><use class="cargo c4" href="#p-env"/>
+    </svg>
+    <figcaption>
+      <p>A nuclear pore seen from the cytoplasm, drawn: eight subunits in a ring. Each letter carries an address tag and lies in an importin, the blue arc under it, which takes it in through the pore. Nothing goes the other way: Importin cannot send, move, flag or delete mail.</p>
+      <label class="pause"><input type="checkbox"> Pause the motion</label>
+    </figcaption>
+  </figure>
+
+  <section class="s" id="facts" aria-labelledby="facts-h">
+    <h2 id="facts-h">How it works</h2>
+    <div class="body">
+      <dl class="facts">
+        <dt>Mail’s own files</dt>
+        <dd>The Envelope Index, Mail’s SQLite database, answers searches by header; the <code>.emlx</code> message files, and the attachments Mail stores beside them, give bodies and attachments. Both are read in <code>~/Library/Mail</code>, where Mail keeps them: no index to build, no watcher, no network.</dd>
+        <dt>Six tools</dt>
+        <dd>Find messages by sender, recipient, Cc, subject, date, mailbox or words in the body; read a message with its To, Cc and Bcc, its thread, or an attachment as text; list mailboxes and accounts.</dd>
+        <dt>S/MIME</dt>
+        <dd>Encrypted messages are decrypted per request, by default with the key in your keychain; the plaintext lives in the response only and is never written to disk.</dd>
+        <dt>Read-only</dt>
+        <dd>No code path sends, moves, flags or deletes mail, and a test reads the source to keep it that way.</dd>
+      </dl>
+    </div>
+  </section>
+
+  <section class="s" id="tools" aria-labelledby="tools-h">
+    <h2 id="tools-h">The six tools</h2>
+    <div class="body">
+      <ul class="tools">
+        <li><h3><code>search</code></h3>
+          <dl><dt>Arguments</dt><dd><code>query</code> (words; all must match), <code>scope</code> = <code>all</code> (default) | <code>subject</code> | <code>from</code> | <code>to</code> | <code>cc</code> | <code>participant</code> | <code>body</code>, <code>after</code>/<code>before</code> (RFC 3339 or <code>YYYY-MM-DD</code> = local midnight), <code>mailbox</code>, <code>account</code>, <code>from</code> (substrings), <code>unread</code>, <code>flagged</code>, <code>limit</code> 1–200 (25), <code>offset</code></dd>
+          <dt>Returns</dt><dd><code>hits</code>, newest first: <code>id</code>, dates, subject, from/to/cc, mailbox, account, read, flagged, encrypted, signed, has_attachments, <code>snippet</code>; <code>truncated</code></dd></dl></li>
+        <li><h3><code>get_email</code></h3>
+          <dl><dt>Arguments</dt><dd><code>id</code>, <code>max_chars</code> 500–200 000 (20 000), <code>html</code> (also return the raw HTML part)</dd>
+          <dt>Returns</dt><dd>headers with to/cc/bcc/reply_to, <code>message_id</code>, <code>body</code> and <code>body_source</code> (plain, html, none), <code>encryption</code>, <code>attachments</code> with their <code>state</code></dd></dl></li>
+        <li><h3><code>get_thread</code></h3>
+          <dl><dt>Arguments</dt><dd><code>id</code>, <code>limit</code> 1–200 (50)</dd>
+          <dt>Returns</dt><dd>the newest <code>limit</code> messages of the conversation, oldest first, in the search hit shape; <code>truncated</code></dd></dl></li>
+        <li><h3><code>attachment_text</code></h3>
+          <dl><dt>Arguments</dt><dd><code>id</code>, <code>filename</code> or <code>index</code> as <code>get_email</code> lists them, <code>max_chars</code> 500–100 000 (20 000)</dd>
+          <dt>Returns</dt><dd>text of PDF, Word (docx), Excel (xlsx, xlsb), PowerPoint (pptx), HTML and text attachments; other types get a one-line note</dd></dl></li>
+        <li><h3><code>list_mailboxes</code></h3>
+          <dl><dt>Arguments</dt><dd><code>account</code> (substring, optional)</dd>
+          <dt>Returns</dt><dd>mailboxes with message and unread counts</dd></dl></li>
+        <li><h3><code>list_accounts</code></h3>
+          <dl><dt>Arguments</dt><dd>none</dd>
+          <dt>Returns</dt><dd>accounts with mailbox and message counts</dd></dl></li>
+      </ul>
+      <p>The header scopes match case-insensitive substrings in the Envelope Index: <code>all</code> covers subject, sender, every recipient and Mail’s summary; <code>participant</code> covers sender, To, Cc and Bcc. <code>scope: body</code> reads the message files instead and needs a query: it scans the newest <code>body_scan_max</code> (500) messages that pass the other filters, received since <code>after</code>, by default the <code>body_scan_days</code> (90) days before <code>before</code> or before now. Encrypted bodies are never searched.</p>
+      <p>Deleted messages are left out of searches, threads and counts. Ids are good within a session only, since Mail renumbers rows when it rebuilds its index; <code>message_id</code> is durable.</p>
+      <figure class="tx">
+        <div class="tx-frame">
+          <p class="tx-bar">opencode</p>
+          <div class="tx-body">
+            <p class="you">› Who was cc'd on the invoice thread in October?</p>
+            <p class="call"><b>mail_search</b> {"query": "invoice", "scope": "subject", "after": "2026-10-01", "before": "2026-11-01"}</p>
+            <p class="call"><b>mail_get_thread</b> {"id": 4182}</p>
+            <p class="ans">Erika Muster (erika.muster@example.org) was cc'd on all three October messages of "Invoice 2026-118": Max Mustermann's of 6 and 21 October and your reply of 14 October. The message of 21 October also had accounts@example.org in Cc.</p>
+          </div>
+        </div>
+        <figcaption>Drawn example, synthetic data. In opencode the tools appear as <code>mail_*</code>, after the server key <code>mail</code>.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="s" id="smime" aria-labelledby="smime-h">
+    <h2 id="smime-h">S/MIME-encrypted and signed mail</h2>
+    <div class="body">
+      <ul class="points">
+        <li>Encrypted messages are decrypted per request. The plaintext lives in the response only and is never written to disk.</li>
+        <li>By default importin pipes the encrypted body to <code>/usr/bin/security cms -D</code>, which finds the private key among the identities of your keychain search list, normally the login keychain. The first time, macOS asks whether <code>security</code> may use the key: choose <strong>Always Allow</strong>. The grant belongs to Apple’s signed <code>security</code>, so it survives updates of importin.</li>
+        <li>Signatures are not verified: a signed message says <code>signature: "not verified"</code>. An opaque signed message, a single <code>smime.p7m</code>, is unpacked, and its content is the body and the attachments.</li>
+        <li>For a key that is not in a macOS keychain, the <code>openssl</code> decryptor reads it from PEM files named in <code>~/.config/importin/config.toml</code>. <code>security cms</code> does not support <code>authEnveloped-data</code> (AES-GCM), and importin says so; the <code>openssl</code> decryptor passes it on, a path that is untested.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="s" id="read-only" aria-labelledby="read-only-h">
+    <h2 id="read-only-h">Read-only by construction</h2>
+    <div class="body">
+      <ul class="points">
+        <li>Importin has no code path that sends, moves, flags or deletes mail, and no switch that adds one. It does not script Mail.app, and it opens the Envelope Index read-only.</li>
+        <li>A test keeps it that way: <code>tests/readonly.rs</code> reads every line under <code>src/</code> and fails on any name of a write path, among them <code>osascript</code>, <code>smtp</code>, <code>send_mail</code>, <code>move_message</code>, <code>delete_message</code>, <code>set_flag</code>, <code>fs::write</code>, <code>File::create</code> and SQLite’s read-write and create flags. A second test fails unless every <code>open_with_flags</code> call in <code>src/</code> passes <code>SQLITE_OPEN_READ_ONLY</code>.</li>
+      </ul>
+      <p class="private"><strong>Read-only is not private.</strong> What importin returns goes to your agent’s model; with a hosted model, it leaves the Mac. To keep an account from the agent, list it in <code>exclude_accounts</code> in <code>~/.config/importin/config.toml</code>: an excluded account is invisible to every tool.</p>
+    </div>
+  </section>
+
+  <section class="s" id="install" aria-labelledby="install-h">
+    <h2 id="install-h">Install and connect</h2>
+    <div class="body">
+      <ol class="steps">
+        <li><h3>Get the binary</h3>
+          <p>Each release carries <code>importin-&lt;tag&gt;-&lt;target&gt;.zip</code> for <code>aarch64-apple-darwin</code> (Apple Silicon) and <code>x86_64-apple-darwin</code> (Intel). Download it from the <a href="https://github.com/glia-org/importin/releases/latest">release page</a> or with <code>gh</code>, which takes the latest release, unzip it, clear the quarantine flag (the binary is not notarised; “No such xattr” means there was none) and put it on your <code>PATH</code>:</p>
+          <pre><code>gh release download -R glia-org/importin -p '*-aarch64-apple-darwin.zip'
+unzip importin-*-aarch64-apple-darwin.zip importin
+xattr -d com.apple.quarantine importin
+mkdir -p ~/.cargo/bin &amp;&amp; mv importin ~/.cargo/bin/</code></pre>
+          <p>Or build it from a checkout of the source: <code>cargo install --path .</code> puts it in <code>~/.cargo/bin/importin</code>. The snippets below assume that path; any absolute path works.</p></li>
+        <li><h3>Grant Full Disk Access</h3>
+          <p><code>~/Library/Mail</code> sits behind Full Disk Access, and macOS asks the app at the top of the process chain, not importin. Grant it to the app that launches your MCP host, your terminal app for opencode and Claude Code, Claude.app for Claude Desktop, in System Settings → Privacy &amp; Security → Full Disk Access. Without it the server exits at startup with status 2 and says why on stderr.</p></li>
+        <li><h3>Add it to your MCP host</h3>
+          <p>importin speaks MCP on stdio. JSON configs are not passed through a shell, so write the path out in full there.</p>
+          <div class="host"><h4>opencode, in <code>opencode.json</code>; the key <code>mail</code> makes the tools appear as <code>mail_*</code></h4>
+<pre><code>{
+  "mcp": {
+    "mail": {
+      "type": "local",
+      "command": ["/Users/you/.cargo/bin/importin"],
+      "enabled": true
+    }
+  }
+}</code></pre></div>
+          <div class="host"><h4>Claude Code; the shell expands <code>~</code></h4>
+<pre><code>claude mcp add --scope user mail -- ~/.cargo/bin/importin</code></pre></div>
+          <div class="host"><h4>Claude Desktop, in <code>claude_desktop_config.json</code></h4>
+<pre><code>{
+  "mcpServers": {
+    "mail": {"command": "/Users/&lt;you&gt;/.cargo/bin/importin"}
+  }
+}</code></pre></div></li>
+        <li><h3>Check the setup with <code>importin doctor</code></h3>
+          <p>Run it from the app that will launch your host. It checks Full Disk Access, the store and its schema, how message files are found, the S/MIME identities in your keychain, a decrypt probe on the newest encrypted message, and timings. It exits with 0 when Full Disk Access is granted and the schema resolved, else 2. <code>--json</code> prints the same as JSON; <code>--anon</code> leaves out account names, exclusion patterns, paths and addresses.</p>
+          <p>Run it once from a terminal to answer the keychain dialog while you are there: its probe waits 60 s, the server’s decryptor gives up after 10 s.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="s" id="measured" aria-labelledby="measured-h">
+    <h2 id="measured-h">Measured times</h2>
+    <div class="body">
+      <p>⟨measure:setup⟩</p>
+      <table class="times">
+        <thead><tr><th scope="col">What</th><th scope="col">Time</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Process start to the first MCP reply</th><td>⟨measure:start⟩</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>subject</code></th><td>⟨measure:search-subject⟩</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>participant</code></th><td>⟨measure:search-participant⟩</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>all</code></th><td>⟨measure:search-all⟩</td></tr>
+          <tr><th scope="row"><code>get_email</code>, a message that is not encrypted</th><td>⟨measure:get-email⟩</td></tr>
+          <tr><th scope="row"><code>get_email</code>, an S/MIME-encrypted message</th><td>⟨measure:get-email-smime⟩</td></tr>
+          <tr><th scope="row"><code>get_thread</code></th><td>⟨measure:get-thread⟩</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>body</code></th><td>⟨measure:search-body⟩</td></tr>
+          <tr><th scope="row"><code>list_mailboxes</code></th><td>⟨measure:list-mailboxes⟩</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="s" id="name" aria-labelledby="name-h">
+    <h2 id="name-h">The name</h2>
+    <div class="body">
+      <p>The name comes from the cell, where importin reads the address tag on a cargo protein, carries it through the gated nuclear pore and releases it inside the nucleus. Exportins carry the outbound traffic; this program has none.</p>
+      <p>The drawing at the top is such a pore, seen from the cytoplasm: eight subunits in a ring around the channel. It leaves out that in the cell the importin goes back out for the next cargo.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot wrap">
+  <p class="brand"><svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><g transform="translate(16 16)"><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(45)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(90)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(135)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(180)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(225)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(270)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(315)"/><circle r="3"/></g></svg>Importin</p>
+  <div class="body">
+    <p>Importin and this page are licensed under the <a href="https://github.com/glia-org/importin/blob/main/LICENSE">Apache License 2.0</a>.</p>
+    <p>Literata by the <a href="https://github.com/googlefonts/literata">Literata Project Authors</a>, under the SIL Open Font License 1.1 (<a href="assets/fonts/OFL.txt">its text</a>); this page serves its Latin characters.</p>
+    <p>No cookies, no analytics, no third-party requests.</p>
+    <p class="links"><a href="https://github.com/glia-org/importin">Source on GitHub</a><a href="https://github.com/glia-org/importin/releases">Releases</a></p>
+  </div>
+</footer>
+</body>
+</html>

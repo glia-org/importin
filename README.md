@@ -183,6 +183,22 @@ Claude Code (the shell expands `~`):
 claude mcp add --scope user mail -- ~/.cargo/bin/importin
 ```
 
+Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`; Claude.app itself needs
+Full Disk Access):
+
+```json
+{
+  "mcpServers": {
+    "mail": {
+      "command": "/Users/you/.cargo/bin/importin"
+    }
+  }
+}
+```
+
+**Read-only is not private.** What importin returns goes to the agent's model; with a hosted model it
+leaves the Mac. An account listed in `exclude_accounts` is invisible to every tool (Configuration above).
+
 ## Layout
 
 | path | what |
