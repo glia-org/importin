@@ -69,16 +69,16 @@ the stdio protocol.
 
 | step | median |
 |---|---:|
-| process start to `initialize` reply | 14 ms |
-| `search` scope `subject`, a term with 3 hits | 17 ms |
-| `search` scope `subject`, a term with no hit | 17 ms |
-| `search` scope `participant`, 3 hits | 66 ms |
-| `search` scope `all`, 3 hits | 84 ms |
-| `get_email`, plain text | 0.5 ms |
-| `get_email`, S/MIME-encrypted (decryptor `openssl`) | 26 ms |
-| `get_thread`, 3 messages | 6 ms |
-| `search` scope `body`, 500 candidates, 4 hits | 56 ms |
-| `list_mailboxes` | 16 ms |
+| process start to `initialize` reply | 15 ms |
+| `search` scope `subject`, a term with 3 hits | 15 ms |
+| `search` scope `subject`, a term with no hit | 15 ms |
+| `search` scope `participant`, 3 hits | 60 ms |
+| `search` scope `all`, 3 hits | 74 ms |
+| `get_email`, plain text | 0.6 ms |
+| `get_email`, S/MIME-encrypted (decryptor `openssl`) | 23 ms |
+| `get_thread`, 3 messages | 7 ms |
+| `search` scope `body`, 500 candidates, 4 hits | 60 ms |
+| `list_mailboxes` | 18 ms |
 
 The figures come from `checks/measure.sh`, which builds the same store and prints them with their range.
 
