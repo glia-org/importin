@@ -65,6 +65,14 @@
     </figcaption>
   </figure>
 
+  <section class="s cell" id="cell" aria-labelledby="cell-h">
+    <h2 id="cell-h">In the cell</h2>
+    <div class="body">
+      <p>A nuclear pore passes about a thousand molecules a second, and a human nucleus has a few thousand of them. Each pore is one of the largest machines in the cell: around thirty kinds of protein, each present in multiples of eight, which is why the ring has eight subunits.</p>
+      <p>An importin is a carrier. It reads a short address tag on its cargo, the nuclear localisation signal, often a run of lysines and arginines such as <code>PKKKRKV</code> (for that classic tag, importin&#8209;&alpha; reads and importin&#8209;&beta; carries). Bound to the cargo, it slips through the pore's meshwork of disordered proteins, which turns away anything much above 40 kDa that has no carrier, and lets go inside when it meets RanGTP, the nucleus's own signal that the cargo has arrived. The importin goes back out alone for the next one; exportins carry cargo the other way.</p>
+    </div>
+  </section>
+
   <section class="s" id="facts" aria-labelledby="facts-h">
     <h2 id="facts-h">How it works</h2>
     <div class="body">
@@ -208,7 +216,7 @@ mkdir -p ~/.cargo/bin &amp;&amp; mv importin ~/.cargo/bin/</code></pre>
   <section class="s" id="name" aria-labelledby="name-h">
     <h2 id="name-h">The name</h2>
     <div class="body">
-      <p>The name comes from the cell, where importin reads the address tag on a cargo protein, carries it through the gated nuclear pore and releases it inside the nucleus. Exportins carry the outbound traffic; this program has none.</p>
+      <p>The name is the carrier's: this program does the inbound half, reading the address on each message and carrying it in to the agent. There is no exportin in it.</p>
       <p>The drawing at the top is such a pore, seen from the cytoplasm: eight subunits in a ring around the channel. It leaves out that in the cell the importin goes back out for the next cargo.</p>
     </div>
   </section>

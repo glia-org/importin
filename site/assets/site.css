@@ -93,6 +93,7 @@ h1{font-size:52px;line-height:1.1;font-weight:380;color:var(--text);letter-spaci
   border-top:1px solid var(--line)}
 .s>h2{position:sticky;top:24px;align-self:start;font-size:30px;line-height:1.2;font-weight:400;color:var(--text);
   letter-spacing:-.005em;text-wrap:balance}
+.s.cell{margin-top:44px;padding-top:0;border-top:0}
 .s>.body{display:flex;flex-direction:column;gap:22px;max-width:46rem;min-width:0}
 h3{font-size:21px;line-height:1.35;font-weight:520;color:var(--text)}
 h4{font-size:16px;line-height:1.4;font-weight:500;color:var(--copy);margin-bottom:8px}
