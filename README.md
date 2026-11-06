@@ -1,6 +1,6 @@
 # Importin
 
-A read-only MCP server for Apple Mail. Importin reads what Mail.app already keeps on this Mac, the
+A read-only MCP server for Apple Mail. Importin reads what Mail.app already keeps on your Mac, the
 Envelope Index (SQLite) and the `.emlx` message files, and gives an AI agent six tools: find messages by
 sender, recipient, Cc, subject, date and mailbox; read one message, S/MIME-encrypted ones included; read an
 attachment as text. No index to build, no watcher, no network. It cannot send, move, flag or delete mail:
