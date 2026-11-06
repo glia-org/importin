@@ -29,7 +29,8 @@
 //! count, 23 signed). `subject_prefix` is NULL unless shown. `conversation_id` = ROWID except the
 //! thread. `message_id` = the `Message-ID` header without brackets. A `summaries` row (the body text)
 //! exists for every single-part text message and for 102 and 103; multipart and encrypted ones have
-//! none. Senders and recipients are written consistently to the headers and the index.
+//! none. Senders and recipients are written consistently to the headers and the index; `recipients`
+//! is indexed by `message`.
 //!
 //! | id | ROWID | mailbox | what it exercises |
 //! |---|---|---|---|
@@ -68,6 +69,7 @@
 //! `Options::messages` adds plain read fillers from ROWID 100_000 in INBOX, subjects
 //! "Filler message 0000"…, 7 days old and one minute older each.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -604,6 +606,10 @@ fn write_index(path: &Path, msgs: &[Msg], sizes: &[i64], epoch: Epoch, form: Url
         )
     };
     assert_eq!(rc, rusqlite::ffi::SQLITE_OK);
+    // Mail's index can find a message's recipients without a table scan: on a real store a
+    // participant search takes milliseconds. Without `recipients_message` every recipient term and
+    // every hit's recipient list scans the whole table, so its cost grows with the square of the
+    // message count.
     conn.execute_batch(
         "CREATE TABLE messages (ROWID INTEGER PRIMARY KEY, message_id TEXT, global_message_id INTEGER, \
            sender INTEGER, subject INTEGER, subject_prefix TEXT, summary INTEGER, date_sent INTEGER, \
@@ -614,7 +620,8 @@ fn write_index(path: &Path, msgs: &[Msg], sizes: &[i64], epoch: Epoch, form: Url
          CREATE TABLE mailboxes (ROWID INTEGER PRIMARY KEY, url TEXT, total_count INTEGER, unread_count INTEGER);
          CREATE TABLE recipients (ROWID INTEGER PRIMARY KEY, message INTEGER, address INTEGER, type INTEGER, \
            position INTEGER);
-         CREATE TABLE summaries (ROWID INTEGER PRIMARY KEY, summary TEXT);",
+         CREATE TABLE summaries (ROWID INTEGER PRIMARY KEY, summary TEXT);
+         CREATE INDEX recipients_message ON recipients (message);",
     )
     .unwrap();
     let ts = |unix: i64| match epoch {
@@ -646,14 +653,15 @@ fn write_index(path: &Path, msgs: &[Msg], sizes: &[i64], epoch: Epoch, form: Url
         tx.execute(sql, params![id, a.addr, a.name]).unwrap();
         id
     };
-    let mut subjects: Vec<&str> = Vec::new();
+    // A map, not a list scan: `Options::messages` can add 100 000 distinct subjects.
+    let mut subjects: HashMap<&str, i64> = HashMap::new();
     for (msg, size) in msgs.iter().zip(sizes) {
         let sender = address_id(msg.from);
-        let subject = match subjects.iter().position(|s| *s == msg.subject) {
-            Some(p) => p as i64 + 1,
+        let subject = match subjects.get(msg.subject.as_str()) {
+            Some(id) => *id,
             None => {
-                subjects.push(&msg.subject);
-                let id = subjects.len() as i64;
+                let id = subjects.len() as i64 + 1;
+                subjects.insert(&msg.subject, id);
                 let sql = "INSERT INTO subjects (ROWID, subject) VALUES (?, ?)";
                 tx.execute(sql, params![id, msg.subject]).unwrap();
                 id

@@ -325,6 +325,19 @@ fn search_folds_unicode_case() {
 }
 
 #[test]
+fn ascii_term_matches_mixed_case_ascii() {
+    let fx = fixture::build(Epoch::Unix);
+    let env = open(&fx, &[]);
+    let [first, second, third] = fx.ids.thread;
+    assert_eq!(
+        search(&env, Scope::Subject, &["KICKoff"]),
+        vec![third, second, first]
+    );
+    // Plain LIKE on a value that also holds non-ASCII letters ("Erika MÜLLER").
+    assert_eq!(search(&env, Scope::From, &["eRIKA"]), vec![133]);
+}
+
+#[test]
 fn null_address_fields_are_empty_strings() {
     let fx = fixture::build(Epoch::Unix);
     let env = open(&fx, &[]);

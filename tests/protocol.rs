@@ -747,3 +747,149 @@ fn budgets_release() {
         "{report}"
     );
 }
+
+/// The README "Measured" figures on a synthetic store of 100 000 messages
+/// (`IMPORTIN_MEASURE_MESSAGES` to change): one warm-up launch, then five, each timing every step
+/// once in the order printed; the table gives the median and the range of the five. Run by
+/// `checks/measure.sh` with `--release`.
+#[test]
+#[ignore = "release measurements: run checks/measure.sh"]
+fn measure_release() {
+    #[allow(clippy::assertions_on_constants)]
+    {
+        assert!(!cfg!(debug_assertions), "run checks/measure.sh");
+    }
+    let total: usize = std::env::var("IMPORTIN_MEASURE_MESSAGES")
+        .map_or(100_000, |v| v.parse().expect("IMPORTIN_MEASURE_MESSAGES"));
+    let start = Instant::now();
+    let fx = fixture::build_with(
+        Epoch::Unix,
+        fixture::Options {
+            messages: total - 43,
+            ..Default::default()
+        },
+    );
+    let built = start.elapsed();
+
+    let index = fx.mail_root.join("V10/MailData/Envelope Index");
+    let messages: i64 =
+        rusqlite::Connection::open_with_flags(&index, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap()
+            .query_row("SELECT count(*) FROM messages", [], |r| r.get(0))
+            .unwrap();
+    let size = |p: &Path| std::fs::metadata(p).map_or(0, |m| m.len());
+    let mb = |b: u64| b as f64 / 1e6;
+    let (on_disk, in_files) = disk_bytes(fx.dir.path());
+    println!(
+        "measure: {messages} messages; fixture {:.1} MB on disk ({:.1} MB in files), \
+         Envelope Index {:.1} MB (-wal {:.1} MB); built in {:.1} s",
+        mb(on_disk),
+        mb(in_files),
+        mb(size(&index)),
+        mb(size(&index.with_file_name("Envelope Index-wal"))),
+        built.as_secs_f64()
+    );
+    if fx.ids.encrypted.is_none() {
+        println!("measure: no openssl, get_email of the S/MIME message skipped");
+    }
+
+    measure_run(&fx);
+    let runs: Vec<_> = (0..5).map(|_| measure_run(&fx)).collect();
+    println!("| step | median ms | range ms |\n|---|---:|---:|");
+    for (i, (label, _)) in runs[0].iter().enumerate() {
+        let mut v: Vec<f64> = runs.iter().map(|r| r[i].1).collect();
+        v.sort_by(f64::total_cmp);
+        println!("| {label} | {:.1} | {:.1}–{:.1} |", v[2], v[0], v[4]);
+    }
+}
+
+/// One launch of `measure_release`: each step's label and milliseconds.
+fn measure_run(fx: &Fixture) -> Vec<(&'static str, f64)> {
+    let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+    let mut out = Vec::new();
+    let start = Instant::now();
+    let mut s = Server::spawn(fx);
+    let r = s.initialize();
+    out.push(("process start to `initialize` reply", ms(start.elapsed())));
+    assert!(r["result"]["serverInfo"].is_object(), "{r}");
+
+    let mut timed = |label, tool: &str, args: Value| -> Value {
+        let start = Instant::now();
+        let v = s.ok(tool, args);
+        out.push((label, ms(start.elapsed())));
+        v
+    };
+    let search = |query: &str, scope: &str| json!({"query": query, "scope": scope, "limit": 25});
+    let hits = |v: &Value| hit_ids(v, "hits").len();
+
+    let v = timed(
+        "`search` subject, 3 hits",
+        "search",
+        search("kickoff", "subject"),
+    );
+    assert_eq!(hits(&v), 3, "{v}");
+    let v = timed(
+        "`search` subject, no hit (full scan)",
+        "search",
+        search("zzyzx", "subject"),
+    );
+    assert_eq!(hits(&v), 0, "{v}");
+    let v = timed(
+        "`search` participant, 3 hits",
+        "search",
+        search("grace", "participant"),
+    );
+    assert_eq!(hits(&v), 3, "{v}");
+    let v = timed("`search` all, 3 hits", "search", search("kickoff", "all"));
+    assert_eq!(hits(&v), 3, "{v}");
+    let v = timed(
+        "`get_email`, plain text",
+        "get_email",
+        json!({"id": fx.ids.plain}),
+    );
+    assert!(
+        v["body"].as_str().unwrap().starts_with("The quarterly"),
+        "{v}"
+    );
+    if let Some(id) = fx.ids.encrypted {
+        let v = timed(
+            "`get_email`, S/MIME-encrypted (openssl)",
+            "get_email",
+            json!({"id": id}),
+        );
+        assert_eq!(v["encryption"]["decrypted"], json!(true), "{v}");
+    }
+    let v = timed(
+        "`get_thread`, 3 messages",
+        "get_thread",
+        json!({"id": fx.ids.thread[0]}),
+    );
+    assert_eq!(v["messages"].as_array().unwrap().len(), 3, "{v}");
+    let v = timed(
+        "`search` body, 500 candidates, 4 hits",
+        "search",
+        search("monday", "body"),
+    );
+    assert_eq!(
+        (hits(&v), &v["candidates_total"], &v["skipped"]),
+        (4, &json!(500), &json!(0)),
+        "{v}"
+    );
+    let v = timed("`list_mailboxes`", "list_mailboxes", json!({}));
+    assert_eq!(v["mailboxes"].as_array().unwrap().len(), 4, "{v}");
+    out
+}
+
+/// Bytes allocated under `p` (as `du` counts them) and bytes in its files.
+fn disk_bytes(p: &Path) -> (u64, u64) {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::symlink_metadata(p).unwrap();
+    let own = meta.blocks() * 512;
+    if !meta.is_dir() {
+        return (own, meta.len());
+    }
+    std::fs::read_dir(p)
+        .unwrap()
+        .map(|e| disk_bytes(&e.unwrap().path()))
+        .fold((own, 0), |(a, b), (x, y)| (a + x, b + y))
+}

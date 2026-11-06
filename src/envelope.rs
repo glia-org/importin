@@ -345,7 +345,11 @@ pub(crate) fn connect(path: &Path) -> rusqlite::Result<Connection> {
 
 /// `ulower(x)`: non-ASCII text lowercased by `str::to_lowercase`, as `LIKE` folds ASCII only
 /// ("müller" would miss "MÜLLER"); ASCII text, which `LIKE` folds itself, and other values pass
-/// through. Lowercasing is not full case folding: "STRASSE" still misses "Straße".
+/// through. Lowercasing is not full case folding: "STRASSE" still misses "Straße". `like` wraps a
+/// column in it only when the term has a non-ASCII character: an ASCII term cannot contain the
+/// non-ASCII letters that lowercasing yields, so plain `LIKE` matches the same rows, except where
+/// a column holds one of the two characters whose lowercase has ASCII in it, the Kelvin sign
+/// U+212A ("k") and U+0130 "İ" ("i" + U+0307); an ASCII term does not find their "k" or "i".
 fn register_ulower(conn: &Connection) -> rusqlite::Result<()> {
     conn.create_scalar_function(
         "ulower",
@@ -949,10 +953,16 @@ fn accounts_from(counts: &HashMap<i64, (i64, i64)>, boxes: Vec<Mailbox>) -> Vec<
     out
 }
 
-/// `pat` comes from `like_pattern`, already lowercased.
+/// `pat` comes from `like_pattern`, already lowercased. `ulower` only for a non-ASCII `pat`; see
+/// `register_ulower`.
 fn like(expr: &str, pat: &str, p: &mut Vec<Value>) -> String {
+    let wrapped = if pat.is_ascii() {
+        expr.to_owned()
+    } else {
+        format!("ulower({expr})")
+    };
     p.push(Value::Text(pat.to_owned()));
-    format!("ulower({expr}) LIKE ? ESCAPE '\\'")
+    format!("{wrapped} LIKE ? ESCAPE '\\'")
 }
 
 /// `imap://paul%40example.test@mail.example.test/INBOX` → user `paul@example.test`, host
@@ -1013,4 +1023,25 @@ fn is_uuid(s: &str) -> bool {
             8 | 13 | 18 | 23 => c == b'-',
             _ => c.is_ascii_hexdigit(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ulower_only_for_a_non_ascii_term() {
+        let mut p = Vec::new();
+        let ascii = like("subjects.subject", &like_pattern("KickOff"), &mut p);
+        assert_eq!(ascii, "subjects.subject LIKE ? ESCAPE '\\'");
+        let umlaut = like("subjects.subject", &like_pattern("MÜLLER"), &mut p);
+        assert_eq!(umlaut, "ulower(subjects.subject) LIKE ? ESCAPE '\\'");
+        assert_eq!(
+            p,
+            [
+                Value::Text("%kickoff%".into()),
+                Value::Text("%müller%".into())
+            ]
+        );
+    }
 }
