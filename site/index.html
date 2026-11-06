@@ -187,19 +187,19 @@ mkdir -p ~/.cargo/bin &amp;&amp; mv importin ~/.cargo/bin/</code></pre>
   <section class="s" id="measured" aria-labelledby="measured-h">
     <h2 id="measured-h">Measured times</h2>
     <div class="body">
-      <p>⟨measure:setup⟩</p>
+      <p>Release build on a synthetic store of 100 000 messages (the test fixture: 43 varied messages, the rest one-line fillers; Envelope Index 17 MB), Apple M2 Pro, macOS 26.5.2, 2026-11-06. Each figure is the median of five launches after one warm-up launch, from request to reply over the stdio protocol; <code>checks/measure.sh</code> in the repository builds the same store and prints them with their range.</p>
       <table class="times">
         <thead><tr><th scope="col">What</th><th scope="col">Time</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Process start to the first MCP reply</th><td>⟨measure:start⟩</td></tr>
-          <tr><th scope="row"><code>search</code>, scope <code>subject</code></th><td>⟨measure:search-subject⟩</td></tr>
-          <tr><th scope="row"><code>search</code>, scope <code>participant</code></th><td>⟨measure:search-participant⟩</td></tr>
-          <tr><th scope="row"><code>search</code>, scope <code>all</code></th><td>⟨measure:search-all⟩</td></tr>
-          <tr><th scope="row"><code>get_email</code>, a message that is not encrypted</th><td>⟨measure:get-email⟩</td></tr>
-          <tr><th scope="row"><code>get_email</code>, an S/MIME-encrypted message</th><td>⟨measure:get-email-smime⟩</td></tr>
-          <tr><th scope="row"><code>get_thread</code></th><td>⟨measure:get-thread⟩</td></tr>
-          <tr><th scope="row"><code>search</code>, scope <code>body</code></th><td>⟨measure:search-body⟩</td></tr>
-          <tr><th scope="row"><code>list_mailboxes</code></th><td>⟨measure:list-mailboxes⟩</td></tr>
+          <tr><th scope="row">Process start to the <code>initialize</code> reply</th><td>15 ms</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>subject</code>, 3 hits (no hit: the same)</th><td>15 ms</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>participant</code>, 3 hits</th><td>60 ms</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>all</code>, 3 hits</th><td>74 ms</td></tr>
+          <tr><th scope="row"><code>get_email</code>, plain text</th><td>0.6 ms</td></tr>
+          <tr><th scope="row"><code>get_email</code>, S/MIME-encrypted (decryptor <code>openssl</code>)</th><td>23 ms</td></tr>
+          <tr><th scope="row"><code>get_thread</code>, 3 messages</th><td>7 ms</td></tr>
+          <tr><th scope="row"><code>search</code>, scope <code>body</code>, 500 candidates, 4 hits</th><td>60 ms</td></tr>
+          <tr><th scope="row"><code>list_mailboxes</code></th><td>18 ms</td></tr>
         </tbody>
       </table>
     </div>

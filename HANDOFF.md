@@ -18,6 +18,20 @@ below), and the fix wave after the whole-branch review (listed under "Since reso
 passed, 1 ignored (the release budget test), no warnings. Everything has run on the synthetic store only;
 nothing has read `~/Library/Mail` yet. Task 12 (real store and opencode switch) remains.
 
+## Website (2026-11-06)
+
+`site/` is the page (decision 12, `docs/design-panel-website-2026-11-06.html`: A V2 P1 C2 S1 H1 M1 R2),
+plain static files, no script, Literata self-hosted, the pore as an inline SVG animation (still under
+reduced motion); `checks/site.py` enforces no external requests, no placeholders, no banned words;
+`.github/workflows/pages.yml` publishes `site/` once Pages is enabled (Settings › Pages › Source: GitHub
+Actions), which needs the repository public (Pages on a private repository is a paid feature; glia-org is on
+the free plan). `site/README.md` holds the rules and the before-publishing list. Figures on the page come
+from README "Measured" (`checks/measure.sh`, a 100 000-message synthetic store; `participant` 60 ms and
+`all` 74 ms miss DESIGN's 50 ms header budget there, see DESIGN §2). The fixture now indexes
+`recipients.message` (Mail's real index has the equivalent; without it participant search is quadratic).
+Note: a release build run with cargo from the toolchain's bin directory fails its strip step
+("Library not loaded: @rpath/libLLVM.dylib"); `DYLD_FALLBACK_LIBRARY_PATH=<toolchain>/lib` fixes it.
+
 ## Build, test, run
 
 ```sh

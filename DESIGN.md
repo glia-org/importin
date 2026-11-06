@@ -84,6 +84,11 @@ Data flow of a `get_email(id)`: `envelope` fetches the row and its recipients â†
 
 ## 4. The Envelope Index
 
+- **Measured 2026-11-06** (README "Measured", `checks/measure.sh`, synthetic 100 000-message store, M2 Pro):
+  start 15 ms, `subject` 15 ms, `get_email` 0.6 ms (S/MIME via openssl 23 ms), `get_thread` 7 ms, body
+  scan of 500 candidates 60 ms, all within budget; `participant` 60 ms and `all` 74 ms miss the 50 ms
+  header budget on that store (one address join per row and a recipient `EXISTS`; `ulower()` is used only
+  for a non-ASCII term). The budget stands as the target; the page quotes the figures as measured.
 - **Opening.** `Connection::open_with_flags(uri, READ_ONLY | URI | NO_MUTEX)` with
   `file:<path>?mode=ro`. WAL mode is Mail's; readers see a consistent snapshot and never block Mail. Busy
   timeout 2 s. Every query is one short read transaction. **`immutable=1` is never used**: it hides
