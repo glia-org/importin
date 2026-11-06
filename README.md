@@ -18,8 +18,11 @@ cargo install importin     # once it is published on crates.io
 Or take a release binary, once `glia-org/importin` has a release: each `v*` tag carries
 `importin-<tag>-<target>.zip` (binary, README, LICENSE) for `aarch64-apple-darwin` (Apple Silicon) and
 `x86_64-apple-darwin` (Intel). Download it from the release page or with `gh`, unzip it, clear the
-quarantine flag (the binary is not notarised; "No such xattr" means there was none) and put it on your
-`PATH`:
+quarantine flag and put it on your `PATH`. The flag matters because the binary is not notarised: notarisation
+means Apple has scanned a build submitted under a paid developer account, and Importin has none, so
+Gatekeeper refuses a downloaded binary ("cannot be opened because the developer cannot be verified") until
+the flag the browser or `gh` attached is removed ("No such xattr" means there was none). A binary built with
+`cargo install` never carries it:
 
 ```sh
 gh release download -R glia-org/importin -p '*-aarch64-apple-darwin.zip'   # latest release
