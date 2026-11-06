@@ -69,6 +69,7 @@
 //! `Options::messages` adds plain read fillers from ROWID 100_000 in INBOX, subjects
 //! "Filler message 0000"…, 7 days old and one minute older each.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -652,14 +653,15 @@ fn write_index(path: &Path, msgs: &[Msg], sizes: &[i64], epoch: Epoch, form: Url
         tx.execute(sql, params![id, a.addr, a.name]).unwrap();
         id
     };
-    let mut subjects: Vec<&str> = Vec::new();
+    // A map, not a list scan: `Options::messages` can add 100 000 distinct subjects.
+    let mut subjects: HashMap<&str, i64> = HashMap::new();
     for (msg, size) in msgs.iter().zip(sizes) {
         let sender = address_id(msg.from);
-        let subject = match subjects.iter().position(|s| *s == msg.subject) {
-            Some(p) => p as i64 + 1,
+        let subject = match subjects.get(msg.subject.as_str()) {
+            Some(id) => *id,
             None => {
-                subjects.push(&msg.subject);
-                let id = subjects.len() as i64;
+                let id = subjects.len() as i64 + 1;
+                subjects.insert(&msg.subject, id);
                 let sql = "INSERT INTO subjects (ROWID, subject) VALUES (?, ?)";
                 tx.execute(sql, params![id, msg.subject]).unwrap();
                 id
