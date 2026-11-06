@@ -4,6 +4,8 @@
    pointer; a click or tap there places one; any letter can be dragged. An importin takes a letter in through the
    pore: it comes in from the cytoplasm for a placed letter, and takes any letter that gets within reach of the pore.
    Inside, letters pile faintly and fade; one dragged toward the membrane stops at the pore. Nothing comes out.
+   Letters the user brings in (fed, dragged to the pore, or herded) arrive with a ripple and a brighter swirl and each
+   lights one subunit; at eight the ring plays a short display and goes dark again. Nothing of it is shown in words.
    The header's mark carries a tiny letter in at the pace of scrolling once the drawing is out of view.
    Units are the drawing's: the viewBox is 760 x 280 around the pore's centre. */
 (() => {
@@ -25,6 +27,8 @@
   const WANDER = 14, BOUNCE = 0.5, EDGE = 18, CROWD = 30;
   // carrying: speed and bend of the way in, walking speed of an importin; letters in the cytoplasm, at most and ambient
   const CARRY = 40, BEND = 0.7, WALK = 85, MAX = 14, AMBIENT = 4;
+  // the display at eight earned arrivals: its length in s; a push counts as herding for HERD s
+  const EGG = 2.8, HERD = 1.5;
 
   const rnd = (a, b) => a + Math.random() * (b - a);
   const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -47,16 +51,35 @@
   const layer = () => svg.insertBefore(make('g', {}), at0);
   const gIn = layer(), gRel = layer(), gImp = layer(), gLet = layer();
   const flash = svg.insertBefore(make('circle', { class: 'p-flash', r: CHAN, opacity: 0 }), at0);
+  // for earned arrivals: an accent copy of the swirl over it, a fill over each subunit (both turn with scroll as the
+  // ring does), and a light for each far pore, clockwise from the top
+  const swirl = svg.querySelector('.p-swirl'), subs = svg.querySelector('.p-turn:not(.p-swirl)');
+  const glow = make('g', { class: 'p-turn p-swirl p-glow', opacity: 0 }), spin = make('g', {}, glow);
+  for (const u of svg.querySelector('#p-fgs').children) spin.append(u.cloneNode());
+  swirl.after(glow);
+  const gLit = make('g', { class: 'p-turn p-lit' });
+  subs.after(gLit);
+  const lit = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => make('use', { href: '#p-sb', transform: `rotate(${45 * k})`, opacity: 0 }, gLit));
+  const gFar = make('g', {});
+  svg.querySelector('.p-far').after(gFar);
+  const far = [...svg.querySelectorAll('.p-far use')].map((u) => {
+    const [x, y, k] = (u.getAttribute('transform').match(/[-\d.]+/g) || []).map(Number);
+    return { a: (Math.atan2(x, -y) + 2 * Math.PI) % (2 * Math.PI),
+      ring: make('circle', { class: 'p-flash', cx: x, cy: y, r: 94 * k, opacity: 0 }, gFar),
+      disc: make('circle', { class: 'p-tag', cx: x, cy: y, r: 52 * k, opacity: 0 }, gFar) };
+  }).sort((p, q) => p.a - q.a);
 
   const letters = [], imps = [], rings = [];
   const ptr = { in: false, mouse: false, x: 0, y: 0, vx: 0, vy: 0, t: -1e9 };
   let T = 0, nextSpawn = 1.5, raf = 0, last = 0, inView = true, paused = box.checked, flashT = 0;
+  let earned = 0, egg = null, glowT = 9, spinA = 0, cascade = 0; // egg: s since the display began, null when none
+  const litT = new Array(8).fill(-9);
   let W = 380, H = 140, S = 1, OX = 0, OY = 0; // visible half-extents, px per unit, the centre in page px
   let drag = null, down = null, cursor = '';
 
   function letter(x, y, op, fade) {
     const l = { x, y, vx: 0, vy: 0, rot: 0, s: sc(Math.hypot(x, y)), op, fade, st: 'free', t: 0, imp: null,
-      heat: 0, w: rnd(0, 2 * Math.PI), calm: 0, due: 0, bend: Math.random() < 0.5 ? -1 : 1,
+      heat: 0, w: rnd(0, 2 * Math.PI), calm: 0, due: 0, bend: Math.random() < 0.5 ? -1 : 1, pushed: -9, earned: false,
       el: make('use', { href: '#p-let' }, gLet) };
     letters.push(l);
     return l;
@@ -82,7 +105,14 @@
   function enter(l, t) {
     const a = rnd(0, 2 * Math.PI), r = PILE * Math.sqrt(Math.random());
     Object.assign(l, { st: 'in', t, x: 0, y: 0, px: r * Math.cos(a), py: r * Math.sin(a), rot0: rnd(-25, 25) });
-    rings.push({ x: 0, y: 0, rot: 0, s: 0.3, op: 0, t, el: make('circle', { class: 'p-tag', r: 5, opacity: 0 }, gRel) });
+    release(t, l.earned);
+    if (!l.earned || t) return;
+    glowT = 0; // an earned arrival: the swirl brightens and, unless the display runs, one more subunit lights
+    if (egg === null) { litT[earned] = T; if (++earned === 8) egg = -0.6; }
+  }
+  function release(t, big) { // the keyframes' release ring; for an earned letter larger, with a hairline ripple
+    rings.push({ x: 0, y: 0, rot: 0, s: 0.3, op: 0, t, big, el: make('circle', { class: 'p-tag', r: 5, opacity: 0 }, gRel),
+      rip: big ? make('circle', { class: 'p-flash', r: 6, opacity: 0 }, gRel) : null });
   }
   function spawn() {
     for (let n = 0; n < 12; n++) {
@@ -94,6 +124,7 @@
     if (Math.hypot(p.x, p.y) <= RIM || letters.filter(inCyto).length >= MAX) return;
     const l = letter(clamp(p.x, -W + EDGE, W - EDGE), clamp(p.y, -H + EDGE, H - EDGE), 0, 1 / 0.2);
     l.calm = T + 0.8;
+    l.earned = true;
     if (Math.hypot(l.x, l.y) < REACH) grab(l); else send(l);
   }
   const tilt = (o, vx, dt) => { o.rot += (clamp(vx * 0.12, -10, 10) - o.rot) * Math.min(1, dt * 4); };
@@ -108,6 +139,7 @@
         const f = PUSH * act * (1 - d / FLEE) ** 2;
         ax += (f * dx) / d; ay += (f * dy) / d;
         closing = ptr.vx * dx + ptr.vy * dy > 0;
+        l.pushed = T;
       }
     }
     l.heat = closing ? Math.min(1, l.heat + dt / HEAT_UP) : l.heat * Math.exp(-dt / HEAT_DOWN);
@@ -127,7 +159,7 @@
     const r = Math.hypot(l.x, l.y);
     l.s = sc(r) * (0.75 + 0.25 * l.op);
     tilt(l, l.vx, dt);
-    if (r < REACH) grab(l);
+    if (r < REACH) { if (T - l.pushed < HERD) l.earned = true; grab(l); } // herded in
     else if (!l.imp && l.due && T > l.due && !ptr.in) send(l);
   }
   function carried(l, dt) { // a spiral in: toward the centre, bent less the nearer it gets
@@ -146,7 +178,8 @@
     if (t < 0.6) { const k = t / 0.6; l.s = 0.62 - 0.28 * k; l.op = 1 - 0.15 * k; return; }
     if (l.el.parentNode !== gIn) gIn.append(l.el);
     const k = Math.min(1, (t - 0.6) / 1.4), e = k * (2 - k);
-    l.x = l.px * e; l.y = l.py * e; l.rot = l.rot0 * e; l.s = 0.34; l.op = 0.85 - 0.53 * k;
+    l.x = l.px * e; l.y = l.py * e; l.rot = l.rot0 * e; l.op = 0.85 - 0.53 * k;
+    l.s = 0.34 + (l.earned ? 0.16 * Math.sin(Math.PI * k) : 0); // an earned one unfolds and shrinks as it settles
     if (k === 1) { l.st = 'inside'; l.t = 0; }
   }
   function step(dt, now) {
@@ -158,6 +191,7 @@
       if (l.st === 'free') free(l, dt, act);
       else if (l.st === 'carry') carried(l, dt);
       else if (l.st === 'in') entering(l, dt);
+      else if (l.egg) tidy(l);
       else if ((l.t += dt) < 20) l.op = 0.32 * (1 - l.t / 20); // inside, fading
       else l.gone = true;
     }
@@ -179,15 +213,66 @@
       } else if ((i.op -= dt / 0.6) <= 0) i.gone = true; // leaving
     }
     for (const g of rings) { // the keyframes' release ring
-      g.t += dt;
-      const k = g.t < 0.5 ? g.t / 0.5 : (g.t - 0.5) / 1.1;
-      if (g.t < 0.5) { g.s = 0.3 + 0.7 * k; g.op = 0.9 * k; } else { g.s = 1 + 1.6 * k; g.op = 0.9 * (1 - k); }
-      if (g.t >= 1.6) g.gone = true;
+      const t = (g.t += dt), top = g.big ? 1 : 0.9, out = g.big ? 1.3 : 1.1, k = t < 0.5 ? t / 0.5 : (t - 0.5) / out;
+      if (t < 0.5) { g.s = 0.3 + 0.7 * k; g.op = top * k; } else { g.s = 1 + (g.big ? 2.2 : 1.6) * k; g.op = top * (1 - k); }
+      if (g.rip) {
+        const q = Math.min(1, t / 1.4);
+        g.rip.setAttribute('r', (6 + 40 * q * (2 - q)).toFixed(1));
+        setOp(g.rip, 0.7 * (1 - q));
+      }
+      if (t >= 0.5 + out) { g.gone = true; if (g.rip) g.rip.remove(); }
     }
+    ringFx(dt);
     flashT = Math.max(0, flashT - dt);
     for (const a of [letters, imps, rings]) {
       for (let k = a.length - 1; k >= 0; k--) if (a[k].gone) { a[k].el.remove(); a.splice(k, 1); }
     }
+  }
+  const setOp = (e, v) => { const s = Math.max(0, v).toFixed(3); if (e._op !== s) e.setAttribute('opacity', (e._op = s)); };
+  function ringFx(dt) { // the swirl's glow, the lit subunits, and the display at eight
+    glowT += dt;
+    let g = 0.5 * Math.min(1, glowT / 0.15) * Math.max(0, 1 - glowT / 0.9), t = -1;
+    if (egg !== null) {
+      t = egg += dt;
+      if (t >= 0 && t - dt < 0) settle();
+      if (t >= 0 && t < EGG) {
+        spinA = (spinA + 900 * Math.sin((Math.PI * t) / EGG) * dt) % 360; // the swirl spins up and down
+        g = Math.max(g, 0.85 * Math.min(1, t / 0.4, (EGG - t) / 0.6));
+        while (cascade < 6 && t >= cascade * 0.3) { release(0, true); cascade++; }
+      }
+      if (t >= 0) far.forEach((f, j) => { // the far pores light one after another, clockwise
+        const x = (t - 0.2 - j * 0.2) / 0.9, b = x > 0 && x < 1 ? Math.sin(Math.PI * x) : 0;
+        setOp(f.ring, 0.7 * b); setOp(f.disc, 0.22 * b);
+      });
+      if (t >= EGG + 1.26) { egg = null; earned = 0; spinA = 0; }
+    }
+    const sa = spinA.toFixed(1);
+    if (spin._a !== sa) spin.setAttribute('transform', `rotate(${(spin._a = sa)})`);
+    setOp(glow, g);
+    setOp(swirl, t >= 0 && t < EGG ? 1 - g : 1);
+    for (let k = 0; k < 8; k++) {
+      const a = T - litT[k];
+      let o = k < earned ? Math.min(1, a / 0.25) * (0.2 + 0.3 * Math.exp(-a / 0.5)) : 0;
+      if (t >= 0 && t < EGG) { // pulses run round the ring
+        const p = (((t * 1.25 - k / 8) % 1) + 1) % 1;
+        o = 0.2 + 0.55 * Math.max(0, 1 - p / 0.3) * Math.min(1, (EGG - t) / 0.5);
+      } else if (t >= EGG) o = 0.2 * clamp(1 - (t - EGG - k * 0.12) / 0.3, 0, 1); // and go out one by one
+      setOp(lit[k], o);
+    }
+  }
+  function settle() { // the pile inside lines up in a ring round the centre, and fades with the display
+    const pile = letters.filter((l) => l.st === 'inside' && !(drag && drag.l === l));
+    pile.forEach((l, k) => {
+      const a = (2 * Math.PI * k) / pile.length - Math.PI / 2, tr = a * DEG + 90;
+      l.egg = { x: l.x, y: l.y, rot: l.rot, op: l.op, tx: 30 * Math.cos(a), ty: 30 * Math.sin(a), dr: ((tr - l.rot + 540) % 360) - 180 };
+    });
+    cascade = 0;
+  }
+  function tidy(l) {
+    const e = l.egg, k = clamp((egg - 0.2) / 1, 0, 1), q = k * (2 - k);
+    l.x = e.x + (e.tx - e.x) * q; l.y = e.y + (e.ty - e.y) * q; l.rot = e.rot + e.dr * q;
+    l.op = (e.op + (0.5 - e.op) * q) * clamp((EGG - egg) / 0.8, 0, 1);
+    if (egg >= EGG) l.gone = true;
   }
   const put = (o) => {
     o.el.setAttribute('transform', `translate(${o.x.toFixed(1)} ${o.y.toFixed(1)}) rotate(${o.rot.toFixed(1)}) scale(${o.s.toFixed(3)})`);
@@ -289,6 +374,7 @@
       drag = null;
       // released in the cytoplasm it is free again; within reach of the pore an importin takes it at once
       if (l.st !== 'inside') Object.assign(l, { calm: T + 0.6, heat: 0, due: T + rnd(2.5, 6) });
+      if (l.st !== 'inside' && Math.hypot(l.x, l.y) < REACH) l.earned = true; // dragged to the pore
       if (e.pointerType !== 'touch') hover(at(e));
     } else if (down && !cancel && Math.hypot(e.pageX - down.x, e.pageY - down.y) < 10 && e.timeStamp - down.t < 600) {
       place(down.p);

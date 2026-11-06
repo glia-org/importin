@@ -106,10 +106,13 @@ h1{font-size:52px;line-height:1.1;font-weight:380;color:var(--text);letter-spaci
 @keyframes hair{to{opacity:1}}
 @keyframes turn{to{transform:rotate(360deg)}}
 @keyframes swirl{to{transform:rotate(540deg)}}
-/* I3, with site.js: the script draws the letters and importins (same symbols) and answers the pointer */
+/* I3, with site.js: the script draws the letters and importins (same symbols) and answers the pointer; the glow
+   over the swirl and the fills over the subunits mark the letters a visitor brings in */
 .play .cargo,.play .p-rel{display:none}
 .play svg{cursor:crosshair;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 .p-flash{fill:none;stroke:var(--accent);stroke-width:.8}
+.p-glow{fill:none;stroke:var(--accent);stroke-width:.9}
+.p-lit{fill:var(--accent)}
 
 /* sections: the headline in the left column, the points in the right */
 .s{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:20px 56px;margin-top:88px;padding-top:28px;
