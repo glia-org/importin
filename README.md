@@ -60,6 +60,28 @@ cap was reached. Ids are only good within a session (Mail
 renumbers rows when it rebuilds its index); `message_id` is durable. Deleted messages are left out of
 searches, threads and counts; excluded accounts are invisible to every tool.
 
+## Measured
+
+Release build on a synthetic store of 100 000 messages (the test fixture: 43 varied messages, the rest
+one-line fillers; 95 MB of files, 445 MB on disk, Envelope Index 17 MB), Apple M2 Pro, macOS 26.5.2,
+2026-11-06; each figure is the median of five launches after one warm-up launch, from request to reply over
+the stdio protocol.
+
+| step | median |
+|---|---:|
+| process start to `initialize` reply | 14 ms |
+| `search` scope `subject`, a term with 3 hits | 17 ms |
+| `search` scope `subject`, a term with no hit | 17 ms |
+| `search` scope `participant`, 3 hits | 66 ms |
+| `search` scope `all`, 3 hits | 84 ms |
+| `get_email`, plain text | 0.5 ms |
+| `get_email`, S/MIME-encrypted (decryptor `openssl`) | 26 ms |
+| `get_thread`, 3 messages | 6 ms |
+| `search` scope `body`, 500 candidates, 4 hits | 56 ms |
+| `list_mailboxes` | 16 ms |
+
+The figures come from `checks/measure.sh`, which builds the same store and prints them with their range.
+
 ## Configuration
 
 `~/.config/importin/config.toml`, or the file named by `IMPORTIN_CONFIG`, which must exist (a missing
@@ -190,6 +212,7 @@ claude mcp add --scope user mail -- ~/.cargo/bin/importin
 | `src/` | the crate, one module per job: `store`, `envelope`, `accounts`, `paths`, `emlx`, `mime`, `smime`, `attach`, `read`, `tools`, `doctor`, `config`, `log` |
 | `tests/` | integration tests on a synthetic Mail store built at test time (`tests/support/fixture.rs`); `readonly.rs` greps `src/` for write paths |
 | `checks/budgets.sh` | the latency budgets, release build, 2 000-message fixture |
+| `checks/measure.sh` | the figures under Measured, release build, 100 000-message fixture |
 | `docs/` | the store format notes, the design panel, the implementation plan |
 
 ## More
