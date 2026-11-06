@@ -25,7 +25,11 @@ plain static files, no script, Literata self-hosted, the pore as an inline SVG a
 reduced motion); `checks/site.py` enforces no external requests, no placeholders, no banned words;
 `.github/workflows/pages.yml` publishes `site/` once Pages is enabled (Settings › Pages › Source: GitHub
 Actions), which needs the repository public (Pages on a private repository is a paid feature; glia-org is on
-the free plan). `site/README.md` holds the rules and the before-publishing list. Figures on the page come
+the free plan). `site/README.md` holds the rules and the before-publishing list. Since the first build the page gained one script
+(`site/assets/site.js`, ~500 lines, decision 12 as amended): the hero is playable (feed, drag, chase, the pull
+test; earned arrivals light the ring, eight set off a display), and below the hero faint letters rise like
+balloons behind the page and are pulled into the pore on the way back. Verified in headless Chrome only
+(the agent's CDP scenarios are not in the repo); Safari and Firefox unchecked. Figures on the page come
 from README "Measured" (`checks/measure.sh`, a 100 000-message synthetic store; `participant` 60 ms and
 `all` 74 ms miss DESIGN's 50 ms header budget there, see DESIGN §2). The fixture now indexes
 `recipients.message` (Mail's real index has the equivalent; without it participant search is quadratic).

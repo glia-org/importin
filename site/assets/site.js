@@ -399,7 +399,8 @@
 
   // S3: while the drawing is out of view, faint one-colour letters, each with its cup, drift in from the window's
   // sides and rise like balloons: buoyancy and drag, a sideways wobble, soft elastic bumps off each other and the
-  // sides, gone over the top. A fixed layer behind the page's text, in window pixels; they light nothing.
+  // sides, gone over the top. When the drawing comes back into view, all in the air are pulled into the pore.
+  // A fixed layer behind the page's text (above it while they are pulled in), in window pixels; they light nothing.
   const sky = make('svg', { class: 'p-sky', 'aria-hidden': 'true' }), fly = [], MAXF = 150;
   const bal = Object.assign(env.cloneNode(true), { id: 'p-sky-env' }); // the letter on its cup, outlines in one colour
   bal.setAttribute('class', 'p-sky-l');
@@ -422,15 +423,22 @@
     skyOn = on;
     clearTimeout(skyTimer);
     if (on) skySpawn();
-    else for (const f of fly) f.out = true; // the drawing is back: those in the air fade
+    else if (fly.length) { // the drawing is back: each balloon is pulled in, the nearer ones faster
+      const [tx, ty] = poreAt();
+      let far = 1;
+      for (const f of fly) { f.pd = Math.hypot(tx - f.x, ty - f.y); far = Math.max(far, f.pd); }
+      for (const f of fly) if (!f.p) f.p = { t: 0, x: f.x, y: f.y, D: (0.5 + (0.4 * f.pd) / far) * rnd(0.9, 1), bend: rnd(-0.15, 0.15) };
+      sky.classList.add('pull');
+    }
     skyKick();
   }
+  function poreAt() { const b = svg.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }
   function skySpawn() { // 6 to 10 a second
     skyTimer = setTimeout(skySpawn, rnd(100, 167));
     if (!skyOn || paused || document.hidden || fly.length >= MAXF) return;
     const dir = Math.random() < 0.5 ? 1 : -1, R = 19 * K;
     fly.push({ x: dir > 0 ? -R : VW + R, y: rnd(R, VH - R), vx: dir * rnd(0.03, 0.07) * VW, vy: rnd(-10, 10), R, rot: 0, t: 0,
-      rise: VH * rnd(0.035, 0.06), w: rnd(1.4, 2.6), ph: rnd(0, 6.3), o: rnd(0.08, 0.14), fo: 1, out: false,
+      rise: VH * rnd(0.035, 0.06), w: rnd(1.4, 2.6), ph: rnd(0, 6.3), o: rnd(0.12, 0.2),
       el: make('use', { href: '#p-sky-env', opacity: 0 }, sky) });
     skyKick();
   }
@@ -440,10 +448,12 @@
     if (paused) return;
     const dt = clamp((now - skyLast) / 1000, 0, 0.05), drag = Math.exp(-0.8 * dt), slide = Math.exp(-0.15 * dt), n = fly.length;
     skyLast = now;
+    const [tx, ty] = sky.classList.contains('pull') ? poreAt() : [0, 0]; // read before anything is written
     head.fill(-1);
     for (let i = 0; i < n; i++) { // buoyancy against drag: a rise of f.rise px/s; little drag sideways, so they drift in
       const f = fly[i];
       f.t += dt;
+      if (f.p) { cellOf[i] = -1; continue; } // being pulled in: no bumps
       f.vx = (f.vx + 30 * K * Math.sin(f.w * f.t + f.ph) * dt) * slide; // with a wobble
       f.vy = (f.vy - 0.8 * f.rise * dt) * drag;
       f.x += f.vx * dt; f.y += f.vy * dt;
@@ -453,6 +463,7 @@
     }
     for (let pass = 0; pass < 2 * n; pass++) { // bumps, twice over: overlapping circles in neighbouring cells part
       const i = pass % n, a = fly[i], ci = cellOf[i], gx = ci % cols, gy = (ci - gx) / cols;
+      if (ci < 0) continue;
       for (let cy = Math.max(0, gy - 1); cy <= Math.min(rows - 1, gy + 1); cy++) {
         for (let cx = Math.max(0, gx - 1); cx <= Math.min(cols - 1, gx + 1); cx++) {
           for (let j = head[cy * cols + cx]; j >= 0; j = next[j]) {
@@ -466,21 +477,33 @@
         }
       }
     }
-    const sc = (0.8 * K).toFixed(3);
     for (const f of fly) {
-      if (f.out) f.fo -= dt / 0.4;
-      f.rot += (clamp(f.vx * 0.15, -12, 12) - f.rot) * Math.min(1, dt * 3);
-      f.el.setAttribute('transform', `translate(${f.x.toFixed(1)} ${f.y.toFixed(1)}) rotate(${f.rot.toFixed(1)}) scale(${sc})`);
-      setOp(f.el, f.o * Math.min(1, f.t / 0.6) * f.fo);
-      if (f.y < -f.R - 4 || f.fo <= 0) { f.gone = true; f.el.remove(); } // over the top: gone
+      let x = f.x, y = f.y, s = 0.8 * K, op = f.o * Math.min(1, f.t / 0.6);
+      if (f.p) { // faster and faster along a slight curve to the pore's centre, shrinking and fading at the end
+        const p = f.p, u = Math.min(1, (p.t += dt) / p.D), q = u * u, z = clamp((u - 0.6) / 0.4, 0, 1);
+        const mx = (p.x + tx) / 2 - (ty - p.y) * p.bend, my = (p.y + ty) / 2 + (tx - p.x) * p.bend;
+        x = (1 - q) ** 2 * p.x + 2 * (1 - q) * q * mx + q * q * tx; y = (1 - q) ** 2 * p.y + 2 * (1 - q) * q * my + q * q * ty;
+        s *= 1 - 0.85 * z; op *= 1 - z;
+        if (u >= 1) f.gone = true;
+      } else f.rot += (clamp(f.vx * 0.15, -12, 12) - f.rot) * Math.min(1, dt * 3);
+      f.el.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${f.rot.toFixed(1)}) scale(${s.toFixed(3)})`);
+      setOp(f.el, op);
+      if (!f.p && f.y < -f.R - 4) f.gone = true; // over the top: gone
     }
-    for (let k = fly.length - 1; k >= 0; k--) if (fly[k].gone) fly.splice(k, 1);
+    for (let k = fly.length - 1; k >= 0; k--) if (fly[k].gone) { fly[k].el.remove(); fly.splice(k, 1); }
+    if (sky.classList.contains('pull') && !fly.some((f) => f.p)) sky.classList.remove('pull'); // behind the page again
     if (fly.length) skyRaf = requestAnimationFrame(skyFrame);
   }
 
+  // balloons start once the drawing has scrolled away above; coming back, spawning stops as soon as its edge shows
+  // and the pull starts once the pore itself can be in view (half the plate, or its top edge below the window's top)
   new IntersectionObserver(([e]) => {
     inView = e.isIntersecting;
-    skySet(!inView && e.boundingClientRect.top < 0);
+    if (!inView && e.boundingClientRect.top < 0) { if (skyOn && !skyTimer) skySpawn(); else skySet(true); }
+    else if (inView) {
+      clearTimeout(skyTimer); skyTimer = 0;
+      if (e.intersectionRatio >= 0.5 || e.boundingClientRect.top >= 0) skySet(false);
+    }
     kick();
-  }).observe(svg);
+  }, { threshold: [0, 0.5] }).observe(svg);
 })();
