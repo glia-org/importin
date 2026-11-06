@@ -401,6 +401,8 @@
   // and up, and an importin carries it up to the mark in the header, into its centre; at most two at a time.
   // Window pixels; the layer sits in the header under the mark. Idle arrivals: they light nothing.
   const top = document.querySelector('.top'), mark = top && top.querySelector('.brand svg');
+  // big and slow: each letter is SKY_SCALE times the drawing's symbol and takes about 10 s from the edge to the mark
+  const SKY_SCALE = 1.6, SKY_SLOW = 2;
   const sky = make('svg', { class: 'p-sky', 'aria-hidden': 'true' }), fly = [];
   let skyOn = false, skyTimer = 0, skyRaf = 0, skyLast = 0, VW = 1200, VH = 900, MX = 0, MY = 0;
   if (mark) top.append(sky);
@@ -415,15 +417,15 @@
     if (on === skyOn) return;
     skyOn = on;
     clearTimeout(skyTimer);
-    if (on) skyTimer = setTimeout(skySpawn, rnd(4000, 9000));
+    if (on) skyTimer = setTimeout(skySpawn, rnd(2000, 5000));
     else for (const f of fly) f.out = true; // the drawing is back: those on their way fade
     skyKick();
   }
   function skySpawn() {
-    skyTimer = setTimeout(skySpawn, rnd(4000, 9000));
-    if (!skyOn || !mark || paused || document.hidden || fly.length >= 2) return;
+    skyTimer = setTimeout(skySpawn, rnd(2000, 5000));
+    if (!skyOn || !mark || paused || document.hidden || fly.length >= 5) return;
     const k = clamp(VW / 1200, 0.7, 1), dir = Math.random() < 0.5 ? 1 : -1;
-    fly.push({ t: 0, k, dir, x0: dir > 0 ? -30 * k : VW + 30 * k, y0: rnd(VH / 3, VH - 40 * k), o: rnd(0.3, 0.4), fo: 1,
+    fly.push({ t: 0, k, dir, x0: dir > 0 ? -70 * k : VW + 70 * k, y0: rnd(VH / 3, VH - 40 * k), o: rnd(0.3, 0.4), fo: 1,
       out: false, cup: make('use', { href: '#p-imv', opacity: 0 }, sky), el: make('use', { href: '#p-let', opacity: 0 }, sky) });
     skyKick();
   }
@@ -434,9 +436,9 @@
     const dt = clamp((now - skyLast) / 1000, 0, 0.05);
     skyLast = now;
     for (const f of fly) {
-      const t = (f.t += dt), d = Math.min(1, t / 1.1), de = d * (2 - d);
+      const t = (f.t += dt / SKY_SLOW), d = Math.min(1, t / 1.1), de = d * (2 - d); // t runs at 1/SKY_SLOW of real time
       const px = f.x0 + f.dir * 110 * f.k * de, py = f.y0 - 24 * f.k * de; // in from the edge, a little up
-      let x = px, y = py, s = 0.6 * f.k, op = f.o * Math.min(1, t / 0.4), cup = f.o * clamp((t - 1.1) / 0.4, 0, 1);
+      let x = px, y = py, s = SKY_SCALE * f.k, op = f.o * Math.min(1, t / 0.4), cup = f.o * clamp((t - 1.1) / 0.4, 0, 1);
       if (t > 1.5) { // taken: a gentle curve up to the mark, smaller as it goes, then into the centre
         const e = Math.min(1, (t - 1.5) / 3), q = e * e * (3 - 2 * e), cx = px + (MX - px) * 0.55, cy = py + (MY - py) * 0.12;
         x = (1 - q) ** 2 * px + 2 * (1 - q) * q * cx + q * q * MX;
