@@ -12,9 +12,11 @@
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="preload" href="assets/fonts/literata-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="assets/site.css">
-<!-- Decisions A V2 P1 C2 S1 H1 M1 R2 from docs/design-panel-website-2026-11-06.html; the rules are in site/README.md.
-     Every claim is of the build as released (v0.1.0) and comes from README.md. Plain static files: no build step, no
-     script, no third-party requests. The pore below is inline SVG with CSS keyframes (assets/site.css). -->
+<script src="assets/site.js" defer></script>
+<!-- Decisions A V2 P1 C2 S1 H1 M1 R2 from docs/design-panel-website-2026-11-06.html, + I3 chase S3 (DESIGN.md, 12);
+     the rules are in site/README.md. Every claim is of the build as released (v0.1.0) and comes from README.md. Plain
+     static files: no build step, no third-party requests. The pore below is inline SVG with CSS keyframes (assets/site.css); the one
+     local script (assets/site.js) adds play to it and is not needed to read the page. -->
 </head>
 <body>
 <header class="top wrap">
@@ -39,9 +41,11 @@
         <g id="p-np">
           <circle class="p-rim" r="94"/>
           <circle class="p-chan" r="52"/>
-          <g class="p-mesh"><use href="#p-fg" transform="rotate(22.5)"/><use href="#p-fg" transform="rotate(67.5)"/><use href="#p-fg" transform="rotate(112.5)"/><use href="#p-fg" transform="rotate(157.5)"/><use href="#p-fg" transform="rotate(202.5)"/><use href="#p-fg" transform="rotate(247.5)"/><use href="#p-fg" transform="rotate(292.5)"/><use href="#p-fg" transform="rotate(337.5)"/></g>
-          <g class="p-sub"><use href="#p-sb"/><use href="#p-sb" transform="rotate(45)"/><use href="#p-sb" transform="rotate(90)"/><use href="#p-sb" transform="rotate(135)"/><use href="#p-sb" transform="rotate(180)"/><use href="#p-sb" transform="rotate(225)"/><use href="#p-sb" transform="rotate(270)"/><use href="#p-sb" transform="rotate(315)"/></g>
+          <use href="#p-fgs"/>
+          <use href="#p-sbs"/>
         </g>
+        <g id="p-fgs" class="p-mesh"><use href="#p-fg" transform="rotate(22.5)"/><use href="#p-fg" transform="rotate(67.5)"/><use href="#p-fg" transform="rotate(112.5)"/><use href="#p-fg" transform="rotate(157.5)"/><use href="#p-fg" transform="rotate(202.5)"/><use href="#p-fg" transform="rotate(247.5)"/><use href="#p-fg" transform="rotate(292.5)"/><use href="#p-fg" transform="rotate(337.5)"/></g>
+        <g id="p-sbs" class="p-sub"><use href="#p-sb"/><use href="#p-sb" transform="rotate(45)"/><use href="#p-sb" transform="rotate(90)"/><use href="#p-sb" transform="rotate(135)"/><use href="#p-sb" transform="rotate(180)"/><use href="#p-sb" transform="rotate(225)"/><use href="#p-sb" transform="rotate(270)"/><use href="#p-sb" transform="rotate(315)"/></g>
         <g id="p-env" transform="scale(1.2)"><path class="p-imp" d="M-15 10Q0 22 15 10"/><rect class="p-box" x="-12" y="-8" width="24" height="16" rx="2"/><path class="p-flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="p-str" d="M9-5.5 14.5-12"/><rect class="p-tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g>
       </defs>
       <rect class="p-field" x="-380" y="-140" width="760" height="280"/>
@@ -55,7 +59,7 @@
         <use href="#p-np" transform="translate(322 -38) scale(.26)"/>
         <use href="#p-np" transform="translate(300 106) scale(.2)"/>
       </g>
-      <use href="#p-np"/>
+      <circle class="p-rim" r="94"/><circle class="p-chan" r="52"/><use class="p-turn p-swirl" href="#p-fgs"/><use class="p-turn" href="#p-sbs"/>
       <circle class="p-rel r1" r="5"/><circle class="p-rel r2" r="5"/><circle class="p-rel r3" r="5"/><circle class="p-rel r4" r="5"/>
       <use class="cargo c1" href="#p-env"/><use class="cargo c2" href="#p-env"/><use class="cargo c3" href="#p-env"/><use class="cargo c4" href="#p-env"/>
     </svg>

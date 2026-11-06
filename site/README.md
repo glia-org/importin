@@ -9,7 +9,8 @@ do, how to install it and add it to an MCP host. Plain static files, served by G
 | path | what |
 |---|---|
 | `index.html` | the page: lead, the pore, how it works, the six tools with a drawn example, S/MIME, read-only, install, measured times, the name |
-| `assets/site.css` | the look, and the pore's keyframes |
+| `assets/site.css` | the look, the pore's keyframes, the sticky header and the ring's turn with scroll |
+| `assets/site.js` | play in the pore (I3 + chase) and the header mark's letter (S3); plain ES2020, no library, loaded with `defer`. The page is complete without it: the keyframes run and the pause control pauses them |
 | `assets/fonts/literata-latin.woff2`, `assets/fonts/OFL.txt` | Literata, its Latin characters (the file Lemna's page serves), with its licence |
 | `assets/favicon.svg` | the mark (M1) in its hinted 16 px form, in the accent: `#97a2ff` in a dark tab bar, `#4a3d9a` in a light one |
 | `assets/apple-touch-icon.png` | the mark at 180 × 180 px on the page's ground, rendered with headless Chrome (`--screenshot --window-size=180,180`) from the 32-unit form used in the header |
@@ -17,7 +18,9 @@ do, how to install it and add it to an MCP host. Plain static files, served by G
 | `../checks/site.py` | the checks below; run before every commit that touches `site/` |
 | `../.github/workflows/pages.yml` | publishes `site/` on every push to `main` that touches it, once Pages is switched on |
 
-There is no script. The pore is inline SVG animated by CSS; its pause control is a checkbox read by CSS (`:has`).
+The pore is inline SVG animated by CSS; its pause control is a checkbox read by CSS (`:has`). The ring's turn with
+scroll and the header's hairline are CSS scroll timelines, left out where a browser lacks them. `site.js` takes over
+the letters from the keyframes where they stand and runs them itself; the pause control stops it too.
 
 ## Preview
 
@@ -40,15 +43,17 @@ The family's rules (glia's site README, rules 1–8), as they apply to this page
    `DESIGN.md`.
 6. **No real mail.** No message, address, mailbox name or count from a real store. Examples are synthetic: Erika
    Muster, Max Mustermann, `example.org`, dates in 2026.
-7. **Complete without JavaScript; reduced motion honoured.** The page has no script. Under `prefers-reduced-motion`
-   the pore stands still, each letter at a different point of its way in, and the pause control is hidden; for
-   everyone else the control pauses it. Phones get one column and 16 px gutters.
+7. **Complete without JavaScript; reduced motion honoured.** The one script, `assets/site.js`, only adds play; without
+   it the page is as before. Under `prefers-reduced-motion` the script does nothing, the pore stands still, each letter
+   at a different point of its way in, the ring does not turn with scroll, and the pause control is hidden; for
+   everyone else the control pauses all of it. Phones get one column and 16 px gutters.
 8. **Importin's own look**: the picks below.
 
 ## Decisions
 
-`A V2 P1 C2 S1 H1 M1 R2`, chosen by the maintainer on 2026-11-06 from `docs/design-panel-website-2026-11-06.html`,
-which shows each option, its mockup and its trade-offs.
+`A V2 P1 C2 S1 H1 M1 R2` + I3 chase S3, chosen by the maintainer on 2026-11-06, the first eight from
+`docs/design-panel-website-2026-11-06.html`, which shows each option, its mockup and its trade-offs; the last three
+amend decision 12 in `DESIGN.md`.
 
 | | picked |
 |---|---|
@@ -58,8 +63,11 @@ which shows each option, its mockup and its trade-offs.
 | C2 | dark only, the panel's night palette: ground `#13131b`, surface `#1c1b26`, text `#e9e7f2`, copy `#b2afc4`, muted `#8a879c`, accent `#97a2ff`, membrane `#6c6794`, fills `#1f1a26` and `#191a2c`, hairline `#2d2c3a` |
 | S1 | the full set of sections: lead, the piece, how it works, the six tools, S/MIME, read-only (and that read-only is not private), install for opencode, Claude Code and Claude Desktop, measured times, the name |
 | H1 | `site/` in glia-org/importin, published by `.github/workflows/pages.yml` (Lemna's, with `actions/checkout@v5`) |
-| M1 | the pore ring, eight short bars around a dot, one colour; never rotated or animated |
+| M1 | the pore ring, eight short bars around a dot, one colour; the mark itself never turns; with the script, once the hero is out of view, it carries a tiny letter in at scroll pace |
 | R2 | pictures of the real thing are drawn stand-ins, labelled as such: one drawn opencode transcript, captioned "Drawn example, synthetic data" |
+| I3 | play in the pore: a click or tap in the cytoplasm places a letter that an importin walks over to and carries in, any letter can be dragged, and one already inside stops at the pore when pulled outward, so the way through is one way |
+| chase | free letters move away from a moving mouse or pen, faster the longer it keeps closing in, stay in the cytoplasm, and an importin takes any herded within reach of the pore |
+| S3 | the ring's subunits and swirl turn with the scroll position (CSS scroll timeline), and the header stays at the top, its mark carrying a tiny letter in at scroll pace while the drawing is out of view |
 
 ## Measured times
 

@@ -3,8 +3,10 @@
    importin and its address tag in the drawing; headlines stay in the text colour.
    Type (V2): Literata for prose and headlines (OFL, fonts/OFL.txt; the Latin file Lemna's page serves), code and
    transcripts in Menlo or the system's monospaced face, none downloaded.
-   The piece (P1): the pore in index.html, inline SVG with the CSS keyframes below; no script. Reduced motion pauses
-   it, which leaves each letter at a different point of its way in; the checkbox under it pauses it for everyone else. */
+   The piece (P1): the pore in index.html, inline SVG with the CSS keyframes below. Reduced motion pauses it, which
+   leaves each letter at a different point of its way in; the checkbox under it pauses it for everyone else. With
+   site.js (I3) the script runs the letters itself and the keyframed ones step aside; without it nothing changes.
+   Scroll (S3): the header stays at the top, and the pore's ring turns with the page where scroll timelines exist. */
 @font-face{font-family:Literata;src:url(fonts/literata-latin.woff2) format("woff2");font-weight:200 900;font-style:normal;
   font-display:swap}
 :root{
@@ -13,9 +15,9 @@
   --membrane:#6c6794;--cyto:#1f1a26;--nucl:#191a2c;--line:#2d2c3a;
   --serif:Literata,Charter,"Iowan Old Style",Georgia,serif;
   --mono:ui-monospace,Menlo,"SF Mono",SFMono-Regular,Consolas,monospace;
-  --gut:40px}
+  --gut:40px;--head:86px}
 *{box-sizing:border-box}
-html{background:var(--ground);color:var(--copy);-webkit-text-size-adjust:100%}
+html{background:var(--ground);color:var(--copy);-webkit-text-size-adjust:100%;scroll-padding-top:calc(var(--head) + 12px)}
 body{margin:0;font:18px/1.65 var(--serif);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 h1,h2,h3,h4,p,ul,ol,dl,dd,figure,pre{margin:0}
 a{color:var(--accent);text-decoration:underline;text-decoration-color:rgba(151,162,255,.4);text-decoration-thickness:1px;
@@ -32,8 +34,12 @@ pre code{font-size:inherit;background:none;padding:0;border-radius:0;overflow-wr
 
 .wrap{max-width:1200px;margin:0 auto;padding-left:var(--gut);padding-right:var(--gut)}
 
-/* header: the mark (M1) beside the wordmark */
-.top{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:28px;padding-bottom:28px}
+/* header: the mark (M1) beside the wordmark; it stays at the top (S3), with a hairline below once the page has
+   scrolled (where scroll timelines exist) */
+.top{position:sticky;top:0;z-index:3;background:var(--ground);display:flex;align-items:center;
+  justify-content:space-between;gap:16px;padding-top:28px;padding-bottom:28px}
+.top::after{content:"";position:absolute;left:var(--gut);right:var(--gut);bottom:0;height:1px;background:var(--line);
+  opacity:0}
 .brand{display:flex;align-items:center;gap:12px;font-size:22px;line-height:1;color:var(--text);letter-spacing:.01em}
 .brand svg{display:block;fill:var(--accent)}
 .top nav{display:flex;gap:24px;font-size:16px}
@@ -87,11 +93,28 @@ h1{font-size:52px;line-height:1.1;font-weight:380;color:var(--text);letter-spaci
   .cargo,.p-rel{animation-play-state:paused}
   .pause{display:none}
 }
+/* S3: the subunits and the swirl turn forwards as the page scrolls down and back as it scrolls up; where scroll
+   timelines are missing they stay put. Not under reduced motion; the pause box holds them. */
+@supports (animation-timeline:scroll()){
+  .top::after{animation:hair auto linear both;animation-timeline:scroll(root);animation-range:0 16px}
+  @media (prefers-reduced-motion:no-preference){
+    .p-turn{animation:turn auto linear both;animation-timeline:scroll(root)}
+    .p-swirl{animation-name:swirl}
+    .plate:has(.pause input:checked) .p-turn{animation-play-state:paused}
+  }
+}
+@keyframes hair{to{opacity:1}}
+@keyframes turn{to{transform:rotate(360deg)}}
+@keyframes swirl{to{transform:rotate(540deg)}}
+/* I3, with site.js: the script draws the letters and importins (same symbols) and answers the pointer */
+.play .cargo,.play .p-rel{display:none}
+.play svg{cursor:crosshair;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.p-flash{fill:none;stroke:var(--accent);stroke-width:.8}
 
 /* sections: the headline in the left column, the points in the right */
 .s{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:20px 56px;margin-top:88px;padding-top:28px;
   border-top:1px solid var(--line)}
-.s>h2{position:sticky;top:24px;align-self:start;font-size:30px;line-height:1.2;font-weight:400;color:var(--text);
+.s>h2{position:sticky;top:calc(var(--head) + 24px);align-self:start;font-size:30px;line-height:1.2;font-weight:400;color:var(--text);
   letter-spacing:-.005em;text-wrap:balance}
 .s>.body{display:flex;flex-direction:column;gap:22px;max-width:46rem;min-width:0}
 h3{font-size:21px;line-height:1.35;font-weight:520;color:var(--text)}
@@ -164,7 +187,7 @@ h4{font-size:16px;line-height:1.4;font-weight:500;color:var(--copy);margin-botto
   .steps h3::before{position:static;display:inline-block;width:1.4em;margin:0}
 }
 @media (max-width:640px){
-  :root{--gut:16px}
+  :root{--gut:16px;--head:66px}
   body{font-size:17px}
   .top{padding-top:18px;padding-bottom:18px}
   .top nav{gap:18px}
