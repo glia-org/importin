@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Importin, a read-only MCP server for Apple Mail</title>
-<meta name="description" content="Importin reads what Mail.app already keeps on your Mac and gives an AI agent six tools to find and read it, S/MIME-encrypted messages included. It cannot send, move, flag or delete mail.">
+<meta name="description" content="Importin reads what Mail.app already keeps on your Mac and gives an AI agent six tools to find and read it, S/⁠MIME-⁠encrypted messages included. It cannot send, move, flag or delete mail.">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#13131b">
 <link rel="canonical" href="https://glia-org.github.io/importin/">
@@ -26,7 +26,7 @@
   <section class="lead" aria-labelledby="lead-h">
     <h1 id="lead-h">A read-only MCP server for Apple Mail</h1>
     <div class="lead-copy">
-      <p>Importin reads what Mail.app already keeps on your Mac and gives an AI agent six tools to find and read it, S/MIME-encrypted messages included. It cannot send, move, flag or delete mail.</p>
+      <p>Importin reads what Mail.app already keeps on your Mac and gives an AI agent six tools to find and read it, S/⁠MIME-⁠encrypted messages included. It cannot send, move, flag or delete mail.</p>
       <p class="get"><a class="btn" href="https://github.com/glia-org/importin/releases/latest">Download</a><span>A zip for Apple Silicon or for Intel. The binary is not notarised by Apple, so macOS refuses it once; one command clears that (<a href="#install">Install</a>), or build it from source. <a class="nw" href="https://github.com/glia-org/importin">Source on GitHub</a>.</span></p>
     </div>
   </section>
@@ -72,7 +72,7 @@
         <dd>The Envelope Index, Mail’s SQLite database, answers searches by header; the <code>.emlx</code> message files, and the attachments Mail stores beside them, give bodies and attachments. Both are read in <code>~/Library/Mail</code>, where Mail keeps them: no index to build, no watcher, no network.</dd>
         <dt>Six tools</dt>
         <dd>Find messages by sender, recipient, Cc, subject, date, mailbox or words in the body; read a message with its To, Cc and Bcc, its thread, or an attachment as text; list mailboxes and accounts.</dd>
-        <dt>S/MIME</dt>
+        <dt>S/⁠MIME</dt>
         <dd>Encrypted messages are decrypted per request, by default with the key in your keychain; the plaintext lives in the response only and is never written to disk.</dd>
         <dt>Read-only</dt>
         <dd>No code path sends, moves, flags or deletes mail, and a test reads the source to keep it that way.</dd>
@@ -121,7 +121,7 @@
   </section>
 
   <section class="s" id="smime" aria-labelledby="smime-h">
-    <h2 id="smime-h">S/MIME-encrypted and signed mail</h2>
+    <h2 id="smime-h">S/⁠MIME-⁠encrypted and signed mail</h2>
     <div class="body">
       <ul class="points">
         <li>Encrypted messages are decrypted per request. The plaintext lives in the response only and is never written to disk.</li>
@@ -178,7 +178,7 @@ mkdir -p ~/.cargo/bin &amp;&amp; mv importin ~/.cargo/bin/</code></pre>
   }
 }</code></pre></div></li>
         <li><h3>Check the setup with <code>importin doctor</code></h3>
-          <p>Run it from the app that will launch your host. It checks Full Disk Access, the store and its schema, how message files are found, the S/MIME identities in your keychain, a decrypt probe on the newest encrypted message, and timings. It exits with 0 when Full Disk Access is granted and the schema resolved, else 2. <code>--json</code> prints the same as JSON; <code>--anon</code> leaves out account names, exclusion patterns, paths and addresses.</p>
+          <p>Run it from the app that will launch your host. It checks Full Disk Access, the store and its schema, how message files are found, the S/⁠MIME identities in your keychain, a decrypt probe on the newest encrypted message, and timings. It exits with 0 when Full Disk Access is granted and the schema resolved, else 2. <code>--json</code> prints the same as JSON; <code>--anon</code> leaves out account names, exclusion patterns, paths and addresses.</p>
           <p>Run it once from a terminal to answer the keychain dialog while you are there: its probe waits 60 s, the server’s decryptor gives up after 10 s.</p></li>
       </ol>
     </div>
@@ -196,7 +196,7 @@ mkdir -p ~/.cargo/bin &amp;&amp; mv importin ~/.cargo/bin/</code></pre>
           <tr><th scope="row"><code>search</code>, scope <code>participant</code>, 3 hits</th><td>60 ms</td></tr>
           <tr><th scope="row"><code>search</code>, scope <code>all</code>, 3 hits</th><td>74 ms</td></tr>
           <tr><th scope="row"><code>get_email</code>, plain text</th><td>0.6 ms</td></tr>
-          <tr><th scope="row"><code>get_email</code>, S/MIME-encrypted (decryptor <code>openssl</code>)</th><td>23 ms</td></tr>
+          <tr><th scope="row"><code>get_email</code>, S/⁠MIME-⁠encrypted (decryptor <code>openssl</code>)</th><td>23 ms</td></tr>
           <tr><th scope="row"><code>get_thread</code>, 3 messages</th><td>7 ms</td></tr>
           <tr><th scope="row"><code>search</code>, scope <code>body</code>, 500 candidates, 4 hits</th><td>60 ms</td></tr>
           <tr><th scope="row"><code>list_mailboxes</code></th><td>18 ms</td></tr>
