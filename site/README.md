@@ -10,7 +10,7 @@ do, how to install it and add it to an MCP host. Plain static files, served by G
 |---|---|
 | `index.html` | the page: lead, the pore, how it works, the six tools with a drawn example, S/MIME, read-only, install, measured times, the name |
 | `assets/site.css` | the look, the pore's keyframes and the sticky header |
-| `assets/site.js` | play in the pore (I3 + chase) and the faint letters from the sides of the window carried to the header's mark (S3); eight earned arrivals light the ring and set off a short display; plain ES2020, no library, loaded with `defer`. The page is complete without it: the keyframes run and the pause control pauses them |
+| `assets/site.js` | play in the pore (I3 + chase) and faint one-colour letters along the window's edges, carried to the header's mark (S3); eight earned arrivals light the ring and set off a short display; plain ES2020, no library, loaded with `defer`. The page is complete without it: the keyframes run and the pause control pauses them |
 | `assets/fonts/literata-latin.woff2`, `assets/fonts/OFL.txt` | Literata, its Latin characters (the file Lemna's page serves), with its licence |
 | `assets/favicon.svg` | the mark (M1) in its hinted 16 px form, in the accent: `#97a2ff` in a dark tab bar, `#4a3d9a` in a light one |
 | `assets/apple-touch-icon.png` | the mark at 180 × 180 px on the page's ground, rendered with headless Chrome (`--screenshot --window-size=180,180`) from the 32-unit form used in the header |
