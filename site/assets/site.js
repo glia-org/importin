@@ -6,8 +6,8 @@
    Inside, letters pile faintly and fade; one dragged toward the membrane stops at the pore. Nothing comes out.
    Letters the user brings in (fed, dragged to the pore, or herded) arrive with a ripple and a brighter swirl and each
    lights one subunit; at eight the ring plays a short display and goes dark again. Nothing of it is shown in words.
-   While the drawing is out of view, faint one-colour letters rise along the window's side gutters and importins carry
-   them along the header band into the mark's centre.
+   While the drawing is out of view, faint one-colour letters drift in from the window's sides behind the page and
+   rise like balloons, bumping off each other.
    Units are the drawing's: the viewBox is 760 x 280 around the pore's centre. */
 (() => {
   'use strict';
@@ -397,28 +397,23 @@
   box.addEventListener('change', pause);
   if (still.addEventListener) still.addEventListener('change', pause);
 
-  // S3: while the drawing is out of view, faint one-colour letters rise along the window's side gutters, outside the
-  // content column; after a second an importin takes each up the gutter and along the header band into the mark's
-  // centre. Up to ten at a time, none where the gutters are too narrow (phones). Idle arrivals: they light nothing.
-  // Window pixels; the layer sits in the header under the mark.
-  const top = document.querySelector('.top'), mark = top && top.querySelector('.brand svg'), col = document.querySelector('main.wrap');
-  const SKY_SCALE = 1.2, SKY_W = 37.5 * 1.2 * SKY_SCALE; // a letter's drawn width with its cup and tag, px
-  const sky = make('svg', { class: 'p-sky', 'aria-hidden': 'true' }), fly = [];
-  const skyDefs = make('defs', {}, sky);
-  for (const [src, id, cls] of [[lt, 'p-sky-let', 'p-sky-l'], [im, 'p-sky-cup', 'p-sky-c']]) { // one-colour copies
-    const g = Object.assign(src.cloneNode(true), { id });
-    g.setAttribute('class', cls);
-    for (const e of g.children) e.removeAttribute('class');
-    skyDefs.append(g);
-  }
-  let skyOn = false, skyTimer = 0, skyRaf = 0, skyLast = 0, VW = 0, VH = 0, MX = 0, MY = 0, GL = 0, GR = 0;
-  if (mark && col) top.append(sky);
-  function skyMeasure() { // the header is at the top whenever the drawing is away, so the mark does not move
-    if (!mark || !col) return;
+  // S3: while the drawing is out of view, faint one-colour letters, each with its cup, drift in from the window's
+  // sides and rise like balloons: buoyancy and drag, a sideways wobble, soft elastic bumps off each other and the
+  // sides, gone over the top. A fixed layer behind the page's text, in window pixels; they light nothing.
+  const sky = make('svg', { class: 'p-sky', 'aria-hidden': 'true' }), fly = [], MAXF = 150;
+  const bal = Object.assign(env.cloneNode(true), { id: 'p-sky-env' }); // the letter on its cup, outlines in one colour
+  bal.setAttribute('class', 'p-sky-l');
+  bal.querySelector('.p-imp').setAttribute('stroke-width', 2);
+  for (const e of bal.children) e.removeAttribute('class');
+  make('defs', {}, sky).append(bal);
+  document.body.append(sky);
+  const next = new Int32Array(MAXF), cellOf = new Int32Array(MAXF);
+  let skyOn = false, skyTimer = 0, skyRaf = 0, skyLast = 0, VW = 0, VH = 0, K = 1, C = 38, cols = 1, rows = 1;
+  let head = new Int32Array(1);
+  function skyMeasure() { // window size; a balloon's radius (19 px, less on narrow windows) sets the grid's cells
     VW = document.documentElement.clientWidth; VH = document.documentElement.clientHeight;
-    const m = mark.getBoundingClientRect(), c = col.getBoundingClientRect(), cs = getComputedStyle(col);
-    MX = m.left + m.width / 2; MY = m.top + m.height / 2;
-    GL = c.left + parseFloat(cs.paddingLeft); GR = VW - c.right + parseFloat(cs.paddingRight); // the gutters' widths
+    K = clamp(VW / 1200, 0.6, 1); C = 38 * K; cols = Math.ceil(VW / C) + 3; rows = Math.ceil(VH / C) + 3;
+    head = new Int32Array(cols * rows);
   }
   skyMeasure();
   addEventListener('resize', skyMeasure);
@@ -426,41 +421,58 @@
     if (on === skyOn) return;
     skyOn = on;
     clearTimeout(skyTimer);
-    if (on) skyTimer = setTimeout(skySpawn, rnd(1500, 4000));
-    else for (const f of fly) f.out = true; // the drawing is back: those on their way fade
+    if (on) skySpawn();
+    else for (const f of fly) f.out = true; // the drawing is back: those in the air fade
     skyKick();
   }
-  function skySpawn() {
-    skyTimer = setTimeout(skySpawn, rnd(1500, 4000));
-    const sides = [GL, GR].map((g, k) => (g >= 1.5 * SKY_W ? k : -1)).filter((k) => k >= 0);
-    if (!skyOn || !sides.length || paused || document.hidden || fly.length >= 10) return;
-    const side = sides[Math.floor(Math.random() * sides.length)], g = side ? GR : GL, gx = side ? VW - g / 2 : g / 2;
-    const sg = Math.sign(MX - gx) || 1, r = Math.min(30, Math.abs(MX - gx) / 2), L1 = VH + 40 - MY - r, La = (Math.PI * r) / 2;
-    fly.push({ t: 0, D: rnd(16, 20), gx, sg, r, L1, La, L: L1 + La + Math.abs(MX - gx) - r, ph: rnd(0, 6.3),
-      A: Math.max(0, Math.min(10, (g - SKY_W) / 2 - 4)) * rnd(0.5, 1), o: rnd(0.1, 0.16), fo: 1, out: false,
-      cup: make('use', { href: '#p-sky-cup', opacity: 0 }, sky), el: make('use', { href: '#p-sky-let', opacity: 0 }, sky) });
+  function skySpawn() { // 6 to 10 a second
+    skyTimer = setTimeout(skySpawn, rnd(100, 167));
+    if (!skyOn || paused || document.hidden || fly.length >= MAXF) return;
+    const dir = Math.random() < 0.5 ? 1 : -1, R = 19 * K;
+    fly.push({ x: dir > 0 ? -R : VW + R, y: rnd(R, VH - R), vx: dir * rnd(0.03, 0.07) * VW, vy: rnd(-10, 10), R, rot: 0, t: 0,
+      rise: VH * rnd(0.035, 0.06), w: rnd(1.4, 2.6), ph: rnd(0, 6.3), o: rnd(0.08, 0.14), fo: 1, out: false,
+      el: make('use', { href: '#p-sky-env', opacity: 0 }, sky) });
     skyKick();
   }
   function skyKick() { if (!skyRaf && fly.length && !paused) { skyLast = performance.now(); skyRaf = requestAnimationFrame(skyFrame); } }
   function skyFrame(now) {
     skyRaf = 0;
     if (paused) return;
-    const dt = clamp((now - skyLast) / 1000, 0, 0.05);
+    const dt = clamp((now - skyLast) / 1000, 0, 0.05), drag = Math.exp(-0.8 * dt), slide = Math.exp(-0.15 * dt), n = fly.length;
     skyLast = now;
+    head.fill(-1);
+    for (let i = 0; i < n; i++) { // buoyancy against drag: a rise of f.rise px/s; little drag sideways, so they drift in
+      const f = fly[i];
+      f.t += dt;
+      f.vx = (f.vx + 30 * K * Math.sin(f.w * f.t + f.ph) * dt) * slide; // with a wobble
+      f.vy = (f.vy - 0.8 * f.rise * dt) * drag;
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      if ((f.x < f.R && f.vx < 0) || (f.x > VW - f.R && f.vx > 0)) f.vx *= -0.6;
+      const c = clamp(Math.floor(f.y / C) + 1, 0, rows - 1) * cols + clamp(Math.floor(f.x / C) + 1, 0, cols - 1);
+      cellOf[i] = c; next[i] = head[c]; head[c] = i;
+    }
+    for (let pass = 0; pass < 2 * n; pass++) { // bumps, twice over: overlapping circles in neighbouring cells part
+      const i = pass % n, a = fly[i], ci = cellOf[i], gx = ci % cols, gy = (ci - gx) / cols;
+      for (let cy = Math.max(0, gy - 1); cy <= Math.min(rows - 1, gy + 1); cy++) {
+        for (let cx = Math.max(0, gx - 1); cx <= Math.min(cols - 1, gx + 1); cx++) {
+          for (let j = head[cy * cols + cx]; j >= 0; j = next[j]) {
+            if (j <= i) continue;
+            const b = fly[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), m = a.R + b.R;
+            if (d >= m || d === 0) continue;
+            const nx = dx / d, ny = dy / d, o = (m - d) / 2, vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+            a.x -= nx * o; a.y -= ny * o; b.x += nx * o; b.y += ny * o;
+            if (vn < 0) { a.vx += 0.8 * vn * nx; a.vy += 0.8 * vn * ny; b.vx -= 0.8 * vn * nx; b.vy -= 0.8 * vn * ny; }
+          }
+        }
+      }
+    }
+    const sc = (0.8 * K).toFixed(3);
     for (const f of fly) {
-      // up the gutter with a slight wobble, a rounded corner into the header band, along it to the mark
-      const t = (f.t += dt), u = Math.min(1, t / f.D), d = f.L * (0.65 * u + 0.35 * u * (2 - u));
-      let x = f.gx + f.sg * (f.r + d - f.L1 - f.La), y = MY;
-      if (d < f.L1) { y = VH + 40 - d; x = f.gx + f.A * Math.sin(y / 35 + f.ph) * clamp((y - MY - f.r - 40) / 80, 0, 1); }
-      else if (d < f.L1 + f.La) { const a = (d - f.L1) / f.r; x = f.gx + f.sg * f.r * (1 - Math.cos(a)); y = MY + f.r * (1 - Math.sin(a)); }
-      const z = clamp((t - f.D + 0.4) / 0.4, 0, 1), s = SKY_SCALE * (1 - 0.55 * clamp((u - 0.85) / 0.15, 0, 1)) * (1 - z);
-      if (t > f.D - 0.2 && !f.rip) f.rip = make('circle', { class: 'p-sky-l', cx: MX, cy: MY, r: 4, opacity: 0 }, sky);
-      if (f.rip) { const q = Math.min(1, (t - f.D + 0.2) / 0.8); f.rip.setAttribute('r', (4 + 14 * q).toFixed(1)); setOp(f.rip, f.o * (1 - q) * f.fo); }
       if (f.out) f.fo -= dt / 0.4;
-      const tr = `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${s.toFixed(3)})`;
-      f.el.setAttribute('transform', tr); f.cup.setAttribute('transform', tr);
-      setOp(f.el, f.o * Math.min(1, t) * (1 - z) * f.fo); setOp(f.cup, f.o * clamp((t - 1) / 0.4, 0, 1) * (1 - z) * f.fo);
-      if (t >= f.D + 0.6 || f.fo <= 0) { f.gone = true; f.el.remove(); f.cup.remove(); if (f.rip) f.rip.remove(); }
+      f.rot += (clamp(f.vx * 0.15, -12, 12) - f.rot) * Math.min(1, dt * 3);
+      f.el.setAttribute('transform', `translate(${f.x.toFixed(1)} ${f.y.toFixed(1)}) rotate(${f.rot.toFixed(1)}) scale(${sc})`);
+      setOp(f.el, f.o * Math.min(1, f.t / 0.6) * f.fo);
+      if (f.y < -f.R - 4 || f.fo <= 0) { f.gone = true; f.el.remove(); } // over the top: gone
     }
     for (let k = fly.length - 1; k >= 0; k--) if (fly[k].gone) fly.splice(k, 1);
     if (fly.length) skyRaf = requestAnimationFrame(skyFrame);

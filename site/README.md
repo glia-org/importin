@@ -10,7 +10,7 @@ do, how to install it and add it to an MCP host. Plain static files, served by G
 |---|---|
 | `index.html` | the page: lead, the pore, how it works, the six tools with a drawn example, S/MIME, read-only, install, measured times, the name |
 | `assets/site.css` | the look, the pore's keyframes and the sticky header |
-| `assets/site.js` | play in the pore (I3 + chase) and faint one-colour letters along the window's edges, carried to the header's mark (S3); eight earned arrivals light the ring and set off a short display; plain ES2020, no library, loaded with `defer`. The page is complete without it: the keyframes run and the pause control pauses them |
+| `assets/site.js` | play in the pore (I3 + chase) and faint one-colour letters that drift in from the window's sides and rise like balloons, bumping off each other (S3); eight earned arrivals light the ring and set off a short display; plain ES2020, no library, loaded with `defer`. The page is complete without it: the keyframes run and the pause control pauses them |
 | `assets/fonts/literata-latin.woff2`, `assets/fonts/OFL.txt` | Literata, its Latin characters (the file Lemna's page serves), with its licence |
 | `assets/favicon.svg` | the mark (M1) in its hinted 16 px form, in the accent: `#97a2ff` in a dark tab bar, `#4a3d9a` in a light one |
 | `assets/apple-touch-icon.png` | the mark at 180 × 180 px on the page's ground, rendered with headless Chrome (`--screenshot --window-size=180,180`) from the 32-unit form used in the header |
@@ -63,11 +63,11 @@ amend decision 12 in `DESIGN.md`.
 | C2 | dark only, the panel's night palette: ground `#13131b`, surface `#1c1b26`, text `#e9e7f2`, copy `#b2afc4`, muted `#8a879c`, accent `#97a2ff`, membrane `#6c6794`, fills `#1f1a26` and `#191a2c`, hairline `#2d2c3a` |
 | S1 | the full set of sections: lead, the piece, how it works, the six tools, S/MIME, read-only (and that read-only is not private), install for opencode, Claude Code and Claude Desktop, measured times, the name |
 | H1 | `site/` in glia-org/importin, published by `.github/workflows/pages.yml` (Lemna's, with `actions/checkout@v5`) |
-| M1 | the pore ring, eight short bars around a dot, one colour; the mark itself never turns; with the script, while the hero is out of view, faint letters from the sides are carried into it |
+| M1 | the pore ring, eight short bars around a dot, one colour; the mark itself never turns |
 | R2 | pictures of the real thing are drawn stand-ins, labelled as such: one drawn opencode transcript, captioned "Drawn example, synthetic data" |
 | I3 | play in the pore: a click or tap in the cytoplasm places a letter that an importin walks over to and carries in, any letter can be dragged, and one already inside stops at the pore when pulled outward, so the way through is one way |
 | chase | free letters move away from a moving mouse or pen, faster the longer it keeps closing in, stay in the cytoplasm, and an importin takes any herded within reach of the pore |
-| S3 | a sticky header, and faint letters from the sides carried to its mark while the hero is out of view |
+| S3 | a sticky header, and while the hero is out of view faint letters that drift in from the window's sides and rise like balloons behind the page |
 
 ## Measured times
 
