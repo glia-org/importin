@@ -6,7 +6,8 @@
    Inside, letters pile faintly and fade; one dragged toward the membrane stops at the pore. Nothing comes out.
    Letters the user brings in (fed, dragged to the pore, or herded) arrive with a ripple and a brighter swirl and each
    lights one subunit; at eight the ring plays a short display and goes dark again. Nothing of it is shown in words.
-   The header's mark carries a tiny letter in at the pace of scrolling once the drawing is out of view.
+   While the drawing is out of view, faint letters come in from the sides of the window now and then, and an importin
+   carries each up to the mark in the header, where it goes into the centre.
    Units are the drawing's: the viewBox is 760 x 280 around the pore's centre. */
 (() => {
   'use strict';
@@ -51,13 +52,13 @@
   const layer = () => svg.insertBefore(make('g', {}), at0);
   const gIn = layer(), gRel = layer(), gImp = layer(), gLet = layer();
   const flash = svg.insertBefore(make('circle', { class: 'p-flash', r: CHAN, opacity: 0 }), at0);
-  // for earned arrivals: an accent copy of the swirl over it, a fill over each subunit (both turn with scroll as the
-  // ring does), and a light for each far pore, clockwise from the top
-  const swirl = svg.querySelector('.p-swirl'), subs = svg.querySelector('.p-turn:not(.p-swirl)');
-  const glow = make('g', { class: 'p-turn p-swirl p-glow', opacity: 0 }), spin = make('g', {}, glow);
+  // for earned arrivals: an accent copy of the swirl over it, a fill over each subunit, and a light for each far
+  // pore, clockwise from the top
+  const swirl = svg.querySelector('.p-swirl'), subs = svg.querySelector('.p-subs');
+  const glow = make('g', { class: 'p-glow', opacity: 0 }), spin = make('g', {}, glow);
   for (const u of svg.querySelector('#p-fgs').children) spin.append(u.cloneNode());
   swirl.after(glow);
-  const gLit = make('g', { class: 'p-turn p-lit' });
+  const gLit = make('g', { class: 'p-lit' });
   subs.after(gLit);
   const lit = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => make('use', { href: '#p-sb', transform: `rotate(${45 * k})`, opacity: 0 }, gLit));
   const gFar = make('g', {});
@@ -391,32 +392,73 @@
   }, { passive: false });
   function pause() { // the pause box, or reduced motion switched on during the visit
     paused = box.checked || still.matches;
-    if (paused) { drag = down = null; setCursor('default'); } else { setCursor(''); kick(); }
+    if (paused) { drag = down = null; setCursor('default'); } else { setCursor(''); kick(); skyKick(); }
   }
   box.addEventListener('change', pause);
   if (still.addEventListener) still.addEventListener('change', pause);
 
-  // S3: the header's mark takes a tiny letter in, driven by how far the page scrolls, while the drawing is away
-  const mg = document.querySelector('.top .brand svg g');
-  const mk = mg && make('use', { href: '#p-env', opacity: 0 }, mg);
-  let mp = 0, mOn = false, mraf = 0, lastY = scrollY;
-  function markDraw() {
-    mraf = 0;
-    if (!mk) return;
-    const k = mp % 1, a = (22.5 + 135 * Math.floor(mp)) / DEG, r = 16 * (1 - k);
-    mk.setAttribute('transform', `translate(${(Math.sin(a) * r).toFixed(2)} ${(-Math.cos(a) * r).toFixed(2)}) scale(${(0.24 * (1 - 0.75 * k)).toFixed(3)})`);
-    mk.setAttribute('opacity', mOn ? clamp(Math.min(k / 0.1, (1 - k) / 0.3), 0, 1).toFixed(2) : 0);
+  // S3: while the drawing is out of view, now and then a faint letter comes in from a side of the window, drifts in
+  // and up, and an importin carries it up to the mark in the header, into its centre; at most two at a time.
+  // Window pixels; the layer sits in the header under the mark. Idle arrivals: they light nothing.
+  const top = document.querySelector('.top'), mark = top && top.querySelector('.brand svg');
+  const sky = make('svg', { class: 'p-sky', 'aria-hidden': 'true' }), fly = [];
+  let skyOn = false, skyTimer = 0, skyRaf = 0, skyLast = 0, VW = 1200, VH = 900, MX = 0, MY = 0;
+  if (mark) top.append(sky);
+  function skyMeasure() {
+    VW = document.documentElement.clientWidth; VH = document.documentElement.clientHeight;
+    const m = mark ? mark.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+    MX = m.left + m.width / 2; MY = m.top + m.height / 2; // the header is at the top whenever the drawing is away
   }
-  function markOn(on) { if (on !== mOn) { mOn = on; if (!on) mp = Math.ceil(mp); markDraw(); } }
-  addEventListener('scroll', () => {
-    const y = scrollY;
-    if (mOn && !paused) { mp += Math.abs(y - lastY) / 600; if (!mraf) mraf = requestAnimationFrame(markDraw); }
-    lastY = y;
-  }, { passive: true });
+  skyMeasure();
+  addEventListener('resize', skyMeasure);
+  function skySet(on) {
+    if (on === skyOn) return;
+    skyOn = on;
+    clearTimeout(skyTimer);
+    if (on) skyTimer = setTimeout(skySpawn, rnd(4000, 9000));
+    else for (const f of fly) f.out = true; // the drawing is back: those on their way fade
+    skyKick();
+  }
+  function skySpawn() {
+    skyTimer = setTimeout(skySpawn, rnd(4000, 9000));
+    if (!skyOn || !mark || paused || document.hidden || fly.length >= 2) return;
+    const k = clamp(VW / 1200, 0.7, 1), dir = Math.random() < 0.5 ? 1 : -1;
+    fly.push({ t: 0, k, dir, x0: dir > 0 ? -30 * k : VW + 30 * k, y0: rnd(VH / 3, VH - 40 * k), o: rnd(0.3, 0.4), fo: 1,
+      out: false, cup: make('use', { href: '#p-imv', opacity: 0 }, sky), el: make('use', { href: '#p-let', opacity: 0 }, sky) });
+    skyKick();
+  }
+  function skyKick() { if (!skyRaf && fly.length && !paused) { skyLast = performance.now(); skyRaf = requestAnimationFrame(skyFrame); } }
+  function skyFrame(now) {
+    skyRaf = 0;
+    if (paused) return;
+    const dt = clamp((now - skyLast) / 1000, 0, 0.05);
+    skyLast = now;
+    for (const f of fly) {
+      const t = (f.t += dt), d = Math.min(1, t / 1.1), de = d * (2 - d);
+      const px = f.x0 + f.dir * 110 * f.k * de, py = f.y0 - 24 * f.k * de; // in from the edge, a little up
+      let x = px, y = py, s = 0.6 * f.k, op = f.o * Math.min(1, t / 0.4), cup = f.o * clamp((t - 1.1) / 0.4, 0, 1);
+      if (t > 1.5) { // taken: a gentle curve up to the mark, smaller as it goes, then into the centre
+        const e = Math.min(1, (t - 1.5) / 3), q = e * e * (3 - 2 * e), cx = px + (MX - px) * 0.55, cy = py + (MY - py) * 0.12;
+        x = (1 - q) ** 2 * px + 2 * (1 - q) * q * cx + q * q * MX;
+        y = (1 - q) ** 2 * py + 2 * (1 - q) * q * cy + q * q * MY;
+        const z = clamp((t - 4.1) / 0.4, 0, 1);
+        s *= (1 - 0.55 * q) * (1 - z); op *= 1 - z; cup *= 1 - z;
+      }
+      if (t > 4.3 && !f.rip) f.rip = make('circle', { class: 'p-flash', cx: MX, cy: MY, r: 4, opacity: 0 }, sky);
+      if (f.rip) { const q = Math.min(1, (t - 4.3) / 0.8); f.rip.setAttribute('r', (4 + 14 * q).toFixed(1)); setOp(f.rip, 0.45 * (1 - q) * f.fo); }
+      if (f.out) f.fo -= dt / 0.4;
+      const tr = `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${s.toFixed(3)})`;
+      f.el.setAttribute('transform', tr); f.cup.setAttribute('transform', tr);
+      setOp(f.el, op * f.fo); setOp(f.cup, cup * f.fo);
+      if (t >= 5.1 || f.fo <= 0) { f.gone = true; f.el.remove(); f.cup.remove(); if (f.rip) f.rip.remove(); }
+    }
+    for (let k = fly.length - 1; k >= 0; k--) if (fly[k].gone) fly.splice(k, 1);
+    if (fly.length) skyRaf = requestAnimationFrame(skyFrame);
+  }
 
   new IntersectionObserver(([e]) => {
     inView = e.isIntersecting;
-    markOn(!inView && e.boundingClientRect.top < 0);
+    skySet(!inView && e.boundingClientRect.top < 0);
     kick();
   }).observe(svg);
 })();
