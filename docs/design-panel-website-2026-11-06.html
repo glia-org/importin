@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Design panel: the Importin website</title>
+<style>
+/* Same voice as docs/design-panel-2026-11-04.html, with a dark variant. The --s-* colours are the site palette
+   proposed in D4 (day and night); every drawn mockup uses them, so the mockups follow this page's appearance.
+   No fonts are loaded: serif and mono in the mockups are system stand-ins. Complete without JavaScript; the script
+   only keeps the picks line in step with the radio buttons. */
+:root{color-scheme:light dark;
+--ink:#1f2937;--ink2:#4b5563;--mu:#6b7280;--line:#e5e7eb;--line2:#d1d5db;--bg:#fafaf9;--card:#fff;--zebra:#f7f8f9;
+--codebg:#eff1f3;--thead:#eceff2;--num:#1f2937;--on-num:#fff;
+--acc:#0f766e;--acc-bg:#e8f5f2;--acc-ink:#0b5a53;--acc-line:#b9ddd5;--on-acc:#fff;
+--warn:#c2410c;--warn-bg:#fff3eb;--warn-ink:#9a3412;--warn-line:#f3c9ae;
+--badge-bg:#eef0f2;--badge-line:#dcdfe3;--badge-ink:#5b6270;
+--mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+--serif:"Iowan Old Style",Charter,"Bitstream Charter","Palatino Linotype",Palatino,Georgia,serif;
+--s-ground:#f7f3f2;--s-surface:#efe8e8;--s-text:#25223a;--s-copy:#4d4a5e;--s-muted:#6b6680;--s-accent:#4a3d9a;
+--s-line:#ddd5d6;--s-membrane:#82769c;--s-cyto:#f1e0e4;--s-nucl:#e8e5f3;--s-chrome:#e7e1e1}
+@media (prefers-color-scheme:dark){:root{
+--ink:#e6e8eb;--ink2:#aab1bb;--mu:#8d95a0;--line:#2a2f36;--line2:#3a414a;--bg:#111316;--card:#181b1f;--zebra:#1c2024;
+--codebg:#252a30;--thead:#20252b;--num:#e6e8eb;--on-num:#111316;
+--acc:#4fb8a8;--acc-bg:#122a27;--acc-ink:#8ad8cb;--acc-line:#24504a;--on-acc:#0d1a18;
+--warn:#f08a5a;--warn-bg:#2e1b12;--warn-ink:#f6b08e;--warn-line:#5a3322;
+--badge-bg:#252a30;--badge-line:#3a414a;--badge-ink:#b4bac3;
+--s-ground:#13131b;--s-surface:#1c1b26;--s-text:#e9e7f2;--s-copy:#b2afc4;--s-muted:#8a879c;--s-accent:#97a2ff;
+--s-line:#2d2c3a;--s-membrane:#6c6794;--s-cyto:#1f1a26;--s-nucl:#191a2c;--s-chrome:#24232f}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.62 var(--sans);-webkit-font-smoothing:antialiased}
+main{max-width:1100px;margin:0 auto;padding:48px 32px 140px}
+a{color:var(--acc-ink)}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+code{font-family:var(--mono);font-size:.86em;background:var(--codebg);padding:.08em .34em;border-radius:4px}
+pre{margin:0}
+h1{font-size:2rem;line-height:1.22;margin:0 0 .35em;letter-spacing:-.01em}
+.meta{color:var(--ink2);margin:0;max-width:80ch}
+h2{font-size:1.45rem;line-height:1.3;margin:3em 0 .9em;padding-top:1em;border-top:1px solid var(--line)}
+h3{font-size:1.2rem;line-height:1.35;margin:0;display:flex;align-items:center;gap:.6em}
+h4{font-size:1rem;line-height:1.35;margin:0}
+section,article,.opt,li[id]{scroll-margin-top:16px}
+p,ul,ol{margin:0 0 1em}
+li{margin:.3em 0}
+strong{font-weight:650}
+.lede{max-width:80ch;color:var(--ink2)}
+/* top: contents and decision sheet */
+.top{display:grid;grid-template-columns:230px 1fr;gap:24px;align-items:start;margin:32px 0 0}
+.box-title{font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu)}
+.toc{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;font-size:.92rem;line-height:1.45}
+.toc ol{list-style:none;padding:0;margin:10px 0 0}
+.toc li{margin:0 0 8px}
+.toc a{text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.toc-decs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0 2px}
+.toc-decs a{display:block;text-align:center;font-size:.8rem;font-weight:600;padding:2px 0;border:1px solid var(--acc-line);background:var(--acc-bg);border-radius:6px}
+.sheet{background:var(--card);border:1px solid var(--line);border-top:4px solid var(--acc);border-radius:12px;padding:16px 22px 18px}
+.sheet-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.hint{font-size:.88rem;color:var(--ink2)}
+.sheet-grid{display:grid;grid-template-columns:3.1em 9.4em 1.1em 1fr;column-gap:8px;font-size:.93rem;line-height:1.45}
+.sheet-grid>*{padding:5px 0;border-bottom:1px solid var(--line)}
+.sheet-grid .num{font-weight:700;text-decoration:none;color:var(--on-num);background:var(--num);border-radius:6px;text-align:center;padding:1px 0;margin:4px 0;align-self:start;font-size:.85rem;border-bottom:0}
+.sheet-grid .num.q{background:var(--ink2)}
+.sheet-grid .what{font-weight:600}
+.sheet-grid .arr{color:var(--mu)}
+.sheet-grid .choice{color:var(--acc-ink)}
+.sheet-grid .choice code{color:var(--ink)}
+.qgrid{grid-template-columns:3.1em 1fr;margin-top:12px;padding-top:6px;border-top:1px solid var(--line)}
+.answer{margin:14px 0 0;font-size:.92rem;color:var(--ink2)}
+.answer code{font-size:.95rem;font-weight:700;color:var(--ink);user-select:all}
+.badge{display:inline-block;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--badge-ink);background:var(--badge-bg);border:1px solid var(--badge-line);border-radius:999px;padding:0 .55em;line-height:1.55;vertical-align:.12em;white-space:nowrap}
+.badge.block{color:var(--warn-ink);background:var(--warn-bg);border-color:var(--warn-line)}
+p.assumed{border-left:3px solid var(--line2);padding:2px 0 2px 12px}
+/* decisions */
+.dec{margin:3.2em 0 0}
+.dec-h{display:flex;align-items:baseline;gap:.7em;flex-wrap:wrap;margin-bottom:.7em}
+.dnum{display:inline-block;font-size:.8rem;font-weight:700;color:var(--on-num);background:var(--num);border-radius:6px;padding:1px 8px;letter-spacing:.02em;align-self:center}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:16px;margin:1.1em 0}
+.opts.two{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+.opt{display:flex;flex-direction:column;gap:12px;min-width:0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.opt.wide{grid-column:1/-1}
+.opt:has(.pick input:checked){border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.opt-h{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.oid{font:700 .82rem/1 var(--mono);padding:5px 7px;border-radius:6px;background:var(--num);color:var(--on-num)}
+.pill-rec{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--on-acc);background:var(--acc);border-radius:999px;padding:0 .55em;line-height:1.6;white-space:nowrap}
+.pick{margin-left:auto;display:inline-flex;gap:6px;align-items:center;font-size:.8rem;color:var(--ink2);cursor:pointer;padding:4px 8px;border:1px solid var(--line);border-radius:6px;white-space:nowrap}
+.pick input{accent-color:var(--acc);margin:0}
+.pick:has(input:checked){color:var(--ink);border-color:var(--acc)}
+.opt>p{margin:0;font-size:.95rem}
+.sw{display:grid;gap:8px;margin:0}
+.sw div{padding:8px 10px;border-radius:8px;background:var(--zebra)}
+.sw dt{font-weight:650;font-size:.82rem;margin-bottom:1px}
+.sw .s dt{color:var(--acc-ink)}
+.sw .w dt{color:var(--warn-ink)}
+.sw dd{margin:0;font-size:.9rem;color:var(--ink2)}
+.rec{background:var(--acc-bg);border:1px solid var(--acc-line);border-left:5px solid var(--acc);border-radius:10px;padding:12px 18px 2px;margin:1.3em 0}
+.rec-label{font-size:.74rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--acc-ink);margin-bottom:4px}
+.rec p{margin:0 0 .8em}
+.rec ul{margin:0 0 .8em;padding-left:1.2em}
+.warnbox{background:var(--warn-bg);border:1px solid var(--warn-line);border-left:5px solid var(--warn);border-radius:10px;padding:12px 18px 2px;margin:1.3em 0}
+.warnbox .rec-label{color:var(--warn-ink)}
+.note{font-size:.9rem;color:var(--ink2);border-left:2px solid var(--line2);padding-left:10px;max-width:84ch}
+/* tables */
+.table-wrap{margin:1em 0 1.5em;overflow-x:auto}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.9rem;line-height:1.48;border:1px solid var(--line);border-radius:10px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line)}
+tbody tr:last-child td,tbody tr:last-child th{border-bottom:0}
+thead th{background:var(--thead);font-weight:650;border-bottom:1px solid var(--line2)}
+thead th:first-child{border-top-left-radius:10px}
+thead th:last-child{border-top-right-radius:10px}
+tbody th{font-weight:650}
+tbody tr:nth-child(even) td,tbody tr:nth-child(even) th{background:var(--zebra)}
+tbody tr.rec-row td,tbody tr.rec-row th{background:var(--acc-bg)}
+tbody tr.rec-row th:first-child{box-shadow:inset 4px 0 0 var(--acc)}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+figure{margin:0}
+figcaption{font-size:.88rem;color:var(--ink2);margin:8px 2px 0}
+/* the site, drawn small (site palette) */
+.mini{border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--s-ground);color:var(--s-copy);font:11px/1.5 var(--serif)}
+.mini-bar{display:flex;align-items:center;gap:5px;padding:6px 8px;background:var(--s-chrome);border-bottom:1px solid var(--s-line);font:10px/1 var(--sans);color:var(--s-muted)}
+.mini-bar i{width:7px;height:7px;border-radius:50%;background:var(--s-line)}
+.mini-bar span{margin-left:8px;padding:3px 8px;border-radius:4px;background:var(--s-ground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px}
+.mini .brand{display:flex;align-items:center;gap:6px;color:var(--s-text);font-size:12px}
+.mini .brand svg{width:14px;height:14px;color:var(--s-accent)}
+.mini .hl{margin:0;font:400 17px/1.22 var(--serif);color:var(--s-text)}
+.mini p{margin:0}
+.mini ul{margin:0;padding-left:1.1em}
+.mini li{margin:.12em 0}
+.mini code{font:9.5px/1.4 var(--mono);background:var(--s-surface);color:var(--s-text);padding:0 .25em;border-radius:3px}
+.mini .get{display:flex;align-items:center;gap:10px;font-size:10px}
+.mini .btn{display:inline-block;background:var(--s-text);color:var(--s-ground);border-radius:6px;padding:2px 9px;font-family:var(--sans)}
+.mini .lnk{color:var(--s-text);text-decoration:underline;text-decoration-color:var(--s-line)}
+.mini .bars b{display:block;height:5px;border-radius:2px;background:var(--s-line);margin:6px 0}
+.mini .sec{font:600 11.5px/1.3 var(--serif);color:var(--s-text);margin-top:2px}
+.mini .tx{font:9px/1.5 var(--mono);background:var(--s-surface);color:var(--s-copy);border-radius:6px;padding:8px 9px;white-space:pre-wrap;word-break:break-word;margin:0}
+.mini .tx .c{color:var(--s-accent)}
+.mini .tx .caret{display:inline-block;width:.55em;height:1.05em;vertical-align:-.2em;background:var(--s-text)}
+.mini.mono{font-family:var(--mono);font-size:10px}
+.mini.mono .hl{font:600 14px/1.25 var(--mono)}
+.mini.sans{font-family:var(--sans)}
+.mini.sans .hl{font:600 16px/1.22 var(--sans);letter-spacing:-.005em}
+.mini.col .mini-body{padding:14px 26px 16px}
+.mini.col .hl{font-size:16px}
+.mini svg{display:block;width:100%;height:auto}
+/* the pore (P1), the data path (P3) */
+.pore .bg{fill:var(--s-cyto)}
+.pore .rim{fill:none;stroke:var(--s-membrane);stroke-width:1.2}
+.pore .sub{fill:var(--s-ground);stroke:var(--s-membrane);stroke-width:2}
+.pore .chan{fill:var(--s-nucl);stroke:var(--s-membrane);stroke-width:1.2}
+.pore .mesh{fill:none;stroke:var(--s-membrane);stroke-width:.9;opacity:.6}
+.pore .far{opacity:.4}
+.pore .env rect{fill:var(--s-ground);stroke:var(--s-text);stroke-width:1.4}
+.pore .env .flap{fill:none;stroke:var(--s-text);stroke-width:1.2;stroke-linejoin:round}
+.pore .env .imp{fill:none;stroke:var(--s-accent);stroke-width:3.4;stroke-linecap:round}
+.pore .env .tag{fill:var(--s-accent);stroke:none}
+.pore .env .str{fill:none;stroke:var(--s-accent);stroke-width:1.1}
+.pore .rel{fill:var(--s-accent);opacity:0}
+.pore .lab{font:11px var(--sans);fill:var(--s-copy)}
+.pore .cargo,.pore .rel{animation-duration:10s;animation-timing-function:linear;animation-iteration-count:infinite;animation-fill-mode:both}
+.pore .c1{animation-name:k1}.pore .c2{animation-name:k2}.pore .c3{animation-name:k3}.pore .c4{animation-name:k4}
+.pore .rel{animation-name:rel}
+.pore .c1,.pore .r1{animation-delay:-3s}.pore .c2,.pore .r2{animation-delay:-5.5s}
+.pore .c3,.pore .r3{animation-delay:-7.2s}.pore .c4,.pore .r4{animation-delay:-9s}
+@keyframes rel{0%,84%{transform:scale(.3);opacity:0}89%{transform:scale(1);opacity:.9}100%{transform:scale(2.6);opacity:0}}
+@keyframes k1{0%{transform:translate(-275px,-25px) rotate(0deg) scale(1.00);opacity:0}6%{transform:translate(-266px,-33px) rotate(3deg) scale(1.00);opacity:1}12%{transform:translate(-251px,-44px) rotate(5deg) scale(1.00);opacity:1}18%{transform:translate(-234px,-55px) rotate(6deg) scale(1.00);opacity:1}24%{transform:translate(-216px,-65px) rotate(6deg) scale(1.00);opacity:1}30%{transform:translate(-196px,-72px) rotate(5deg) scale(1.00);opacity:1}36%{transform:translate(-175px,-76px) rotate(3deg) scale(1.00);opacity:1}42%{transform:translate(-153px,-77px) rotate(0deg) scale(1.00);opacity:1}48%{transform:translate(-131px,-75px) rotate(-3deg) scale(1.00);opacity:1}54%{transform:translate(-109px,-69px) rotate(-5deg) scale(1.00);opacity:1}60%{transform:translate(-86px,-60px) rotate(-6deg) scale(0.95);opacity:1}66%{transform:translate(-64px,-48px) rotate(-6deg) scale(0.87);opacity:1}72%{transform:translate(-42px,-34px) rotate(-5deg) scale(0.79);opacity:1}78%{transform:translate(-21px,-18px) rotate(-3deg) scale(0.71);opacity:1}84%{transform:translate(0px,0px) rotate(-0deg) scale(0.62);opacity:1}90%{transform:translate(0px,0px) rotate(0deg) scale(0.34);opacity:0.85}95%{transform:translate(0px,0px) rotate(0deg) scale(0.16);opacity:0.45}100%{transform:translate(0px,0px) rotate(0deg) scale(0.05);opacity:0}}
+@keyframes k2{0%{transform:translate(150px,-180px) rotate(0deg) scale(1.00);opacity:0}6%{transform:translate(153px,-173px) rotate(3deg) scale(1.00);opacity:1}12%{transform:translate(157px,-162px) rotate(5deg) scale(1.00);opacity:1}18%{transform:translate(159px,-150px) rotate(6deg) scale(1.00);opacity:1}24%{transform:translate(159px,-138px) rotate(6deg) scale(1.00);opacity:1}30%{transform:translate(155px,-125px) rotate(5deg) scale(1.00);opacity:1}36%{transform:translate(148px,-113px) rotate(3deg) scale(1.00);opacity:1}42%{transform:translate(137px,-101px) rotate(0deg) scale(1.00);opacity:1}48%{transform:translate(123px,-89px) rotate(-3deg) scale(1.00);opacity:1}54%{transform:translate(106px,-77px) rotate(-5deg) scale(1.00);opacity:1}60%{transform:translate(86px,-65px) rotate(-6deg) scale(0.96);opacity:1}66%{transform:translate(65px,-51px) rotate(-6deg) scale(0.88);opacity:1}72%{transform:translate(42px,-37px) rotate(-5deg) scale(0.80);opacity:1}78%{transform:translate(20px,-20px) rotate(-3deg) scale(0.71);opacity:1}84%{transform:translate(0px,0px) rotate(-0deg) scale(0.62);opacity:1}90%{transform:translate(0px,0px) rotate(0deg) scale(0.34);opacity:0.85}95%{transform:translate(0px,0px) rotate(0deg) scale(0.16);opacity:0.45}100%{transform:translate(0px,0px) rotate(0deg) scale(0.05);opacity:0}}
+@keyframes k3{0%{transform:translate(-118px,180px) rotate(0deg) scale(1.00);opacity:0}6%{transform:translate(-121px,172px) rotate(3deg) scale(1.00);opacity:1}12%{transform:translate(-123px,160px) rotate(5deg) scale(1.00);opacity:1}18%{transform:translate(-125px,148px) rotate(6deg) scale(1.00);opacity:1}24%{transform:translate(-124px,135px) rotate(6deg) scale(1.00);opacity:1}30%{transform:translate(-121px,122px) rotate(5deg) scale(1.00);opacity:1}36%{transform:translate(-116px,109px) rotate(3deg) scale(1.00);opacity:1}42%{transform:translate(-107px,97px) rotate(0deg) scale(1.00);opacity:1}48%{transform:translate(-96px,85px) rotate(-3deg) scale(1.00);opacity:1}54%{transform:translate(-83px,74px) rotate(-5deg) scale(0.97);opacity:1}60%{transform:translate(-67px,62px) rotate(-6deg) scale(0.91);opacity:1}66%{transform:translate(-51px,49px) rotate(-6deg) scale(0.84);opacity:1}72%{transform:translate(-33px,35px) rotate(-5deg) scale(0.77);opacity:1}78%{transform:translate(-16px,19px) rotate(-3deg) scale(0.70);opacity:1}84%{transform:translate(0px,0px) rotate(-0deg) scale(0.62);opacity:1}90%{transform:translate(0px,0px) rotate(0deg) scale(0.34);opacity:0.85}95%{transform:translate(0px,0px) rotate(0deg) scale(0.16);opacity:0.45}100%{transform:translate(0px,0px) rotate(0deg) scale(0.05);opacity:0}}
+@keyframes k4{0%{transform:translate(280px,42px) rotate(0deg) scale(1.00);opacity:0}6%{transform:translate(271px,48px) rotate(3deg) scale(1.00);opacity:1}12%{transform:translate(257px,55px) rotate(5deg) scale(1.00);opacity:1}18%{transform:translate(240px,62px) rotate(6deg) scale(1.00);opacity:1}24%{transform:translate(220px,68px) rotate(6deg) scale(1.00);opacity:1}30%{transform:translate(200px,72px) rotate(5deg) scale(1.00);opacity:1}36%{transform:translate(178px,74px) rotate(3deg) scale(1.00);opacity:1}42%{transform:translate(155px,73px) rotate(0deg) scale(1.00);opacity:1}48%{transform:translate(132px,69px) rotate(-3deg) scale(1.00);opacity:1}54%{transform:translate(108px,62px) rotate(-5deg) scale(1.00);opacity:1}60%{transform:translate(85px,53px) rotate(-6deg) scale(0.94);opacity:1}66%{transform:translate(62px,42px) rotate(-6deg) scale(0.86);opacity:1}72%{transform:translate(40px,29px) rotate(-5deg) scale(0.78);opacity:1}78%{transform:translate(19px,15px) rotate(-3deg) scale(0.70);opacity:1}84%{transform:translate(0px,0px) rotate(-0deg) scale(0.62);opacity:1}90%{transform:translate(0px,0px) rotate(0deg) scale(0.34);opacity:0.85}95%{transform:translate(0px,0px) rotate(0deg) scale(0.16);opacity:0.45}100%{transform:translate(0px,0px) rotate(0deg) scale(0.05);opacity:0}}
+.pore.still .cargo,.pore.still .rel{animation-play-state:paused}
+.piece:has(.pausectl input:checked) .cargo,.piece:has(.pausectl input:checked) .rel{animation-play-state:paused}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.pore .cargo,.pore .rel{animation-play-state:paused}}
+.piece{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px;align-items:start}
+.piece svg{display:block;width:100%;height:auto;border-radius:10px;border:1px solid var(--line2)}
+.pausectl{display:inline-flex;gap:6px;align-items:center;font-size:.85rem;color:var(--ink2);margin-top:8px;cursor:pointer}
+.pausectl input{accent-color:var(--acc);margin:0}
+.dg .bx{fill:var(--s-ground);stroke:var(--s-membrane);stroke-width:1.5}
+.dg .bxa{fill:var(--s-nucl);stroke:var(--s-accent);stroke-width:2}
+.dg .bg{fill:var(--s-cyto)}
+.dg text{font:13px var(--sans);fill:var(--s-text)}
+.dg .m{font-family:var(--mono);font-size:12px}
+.dg .mu{fill:var(--s-copy)}
+.dg .b{font-weight:600}
+.dg .ln{fill:none;stroke:var(--s-copy);stroke-width:1.5}
+.dg .lna{fill:none;stroke:var(--s-accent);stroke-width:2}
+.dg .ah{fill:var(--s-copy)}
+.dg .aha{fill:var(--s-accent)}
+.dg .no{fill:none;stroke:var(--s-membrane);stroke-width:1.5;stroke-dasharray:4 4}
+/* P2: the transcript, CSS only */
+.txd{border:1px solid var(--line2);border-radius:10px;overflow:hidden;background:var(--s-ground)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
+.txd-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:8px;background:var(--s-chrome);border-bottom:1px solid var(--s-line)}
+.txd-tabs label{font:12px/1 var(--mono);padding:6px 8px;border-radius:6px;color:var(--s-copy);cursor:pointer;border:1px solid transparent}
+.txd-panes pre{display:none;font:11.5px/1.5 var(--mono);color:var(--s-copy);padding:12px 14px;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.txd-panes .c{color:var(--s-accent)}
+#tx1:checked~.txd-panes .t1,#tx2:checked~.txd-panes .t2,#tx3:checked~.txd-panes .t3,#tx4:checked~.txd-panes .t4,#tx5:checked~.txd-panes .t5,#tx6:checked~.txd-panes .t6{display:block}
+#tx1:checked~.txd-tabs [for=tx1],#tx2:checked~.txd-tabs [for=tx2],#tx3:checked~.txd-tabs [for=tx3],#tx4:checked~.txd-tabs [for=tx4],#tx5:checked~.txd-tabs [for=tx5],#tx6:checked~.txd-tabs [for=tx6]{background:var(--s-ground);color:var(--s-text);border-color:var(--s-line)}
+#tx1:focus-visible~.txd-tabs [for=tx1],#tx2:focus-visible~.txd-tabs [for=tx2],#tx3:focus-visible~.txd-tabs [for=tx3],#tx4:focus-visible~.txd-tabs [for=tx4],#tx5:focus-visible~.txd-tabs [for=tx5],#tx6:focus-visible~.txd-tabs [for=tx6]{outline:2px solid var(--s-accent);outline-offset:1px}
+/* type specimens (D2) */
+.spec{border:1px solid var(--line2);border-radius:10px;background:var(--s-ground);color:var(--s-copy);padding:16px 18px;display:flex;flex-direction:column;gap:8px}
+.spec .sh{margin:0;color:var(--s-text);font-size:21px;line-height:1.25}
+.spec p{margin:0;font-size:15px;line-height:1.6}
+.spec pre{font:12.5px/1.5 var(--mono);color:var(--s-text);background:var(--s-surface);border-radius:6px;padding:7px 9px;white-space:pre-wrap;word-break:break-word}
+.spec.v1,.spec.v1 .sh{font-family:var(--mono)}
+.spec.v1 .sh{font-size:17px;font-weight:600}
+.spec.v1 p{font-size:13px;line-height:1.55}
+.spec.v2{font-family:var(--serif)}
+.spec.v2 .sh{font-weight:400}
+.spec.v2 p{font-size:16px;line-height:1.62}
+.spec.v3{font-family:var(--sans)}
+.spec.v3 .sh{font-weight:600;letter-spacing:-.01em}
+/* swatches (D4) */
+.pal{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:16px;margin:1em 0}
+.pal-g{border-radius:12px;padding:16px;border:1px solid var(--line2)}
+.pal-g h4{margin-bottom:10px}
+.chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.chip{border-radius:8px;padding:8px 10px;font-size:.8rem;line-height:1.35;border:1px solid rgba(127,127,127,.25)}
+.chip i{display:block;height:26px;border-radius:5px;margin-bottom:6px;border:1px solid rgba(127,127,127,.3)}
+.chip b{display:block;font-weight:650}
+.chip code{background:none;padding:0;font-size:.78rem}
+.day{background:#f7f3f2;color:#4d4a5e}
+.day h4,.day b{color:#25223a}
+.day .chip{background:#efe8e8}
+.night{background:#13131b;color:#b2afc4}
+.night h4,.night b{color:#e9e7f2}
+.night .chip{background:#1c1b26}
+.pal-g p{margin:10px 0 0;font-size:.85rem}
+.pal-g a{color:inherit}
+.day .lk{color:#4a3d9a}
+.night .lk{color:#97a2ff}
+/* outlines (D5) */
+.outline{margin:0;padding-left:1.5em}
+.outline>li{margin:.6em 0}
+.outline ul{margin:.3em 0 0;padding-left:1.1em;font-size:.9rem;color:var(--ink2)}
+.outline ul li{margin:.2em 0}
+.outline .hd{font-weight:650}
+.outline pre{font:12px/1.5 var(--mono);background:var(--codebg);border-radius:6px;padding:8px 10px;margin:.4em 0;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+/* marks (D7) */
+.marks{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;color:var(--s-text)}
+.marks figure{display:flex;flex-direction:column;align-items:center;gap:6px}
+.marks figcaption{margin:0;font-size:.78rem;color:var(--ink2)}
+.marks .tile{display:grid;place-items:center;background:var(--s-ground);border:1px solid var(--line2);border-radius:10px;padding:12px}
+.marks svg{display:block}
+.tabbar{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.tabstrip{display:flex;align-items:center;gap:8px;padding:6px 10px 0;border-radius:8px 8px 0 0;font:12px/1 var(--sans);width:min(100%,330px)}
+.tabstrip .tb{display:flex;align-items:center;gap:7px;padding:7px 12px;border-radius:7px 7px 0 0;white-space:nowrap;overflow:hidden}
+.tabstrip.l{background:#dedcdc;color:#25223a}.tabstrip.l .tb{background:#f7f3f2}
+.tabstrip.d{background:#0c0c12;color:#e9e7f2}.tabstrip.d .tb{background:#1c1b26}
+.pxgrid{background-image:linear-gradient(rgba(127,127,127,.28) 1px,transparent 1px),linear-gradient(90deg,rgba(127,127,127,.28) 1px,transparent 1px);background-size:4px 4px}
+/* terminals (D8), a neutral dark terminal in either appearance */
+.term{border-radius:10px;overflow:hidden;background:#16161e;color:#c8cbd8;font:11px/1.55 var(--mono);border:1px solid #2a2b38;position:relative}
+.term .tbar{display:flex;align-items:center;gap:5px;padding:6px 9px;background:#20212c;color:#8a8fa8;font-size:10px}
+.term .tbar i{width:7px;height:7px;border-radius:50%;background:#3a3c4c}
+.term .tbody{padding:10px 12px 12px;white-space:pre-wrap;word-break:break-word;min-height:150px}
+.term .u{color:#e8eaf3}
+.term .t{color:#7aa2f7}
+.term .d{color:#8a8fa8}
+.term .label{position:absolute;right:8px;bottom:8px;font:600 10px/1 var(--sans);color:#16161e;background:#e0af68;border-radius:4px;padding:3px 6px}
+.term .hatch{min-height:150px;margin:10px 12px 12px;border:1px dashed #4a4c5e;border-radius:6px;display:grid;place-items:center;text-align:center;padding:12px;color:#8a8fa8;font-family:var(--sans);background:repeating-linear-gradient(135deg,transparent 0 8px,rgba(255,255,255,.035) 8px 16px)}
+.opts.top{align-items:start}
+ul.notes{font-size:.9rem;color:var(--ink2);padding-left:1.3em;max-width:84ch;margin:0 0 1em}
+ul.notes li{margin:.35em 0}
+dl.kv{margin:0;font-size:.92rem}
+dl.kv dt{font-size:.78rem;font-weight:650;color:var(--mu);margin-top:8px}
+dl.kv dt:first-child{margin-top:0}
+dl.kv dd{margin:0}
+dl.kv code{word-break:break-all}
+.term .tbody.flow{white-space:normal;padding-bottom:30px}
+.term .call{padding-left:2ch;color:#8a8fa8}
+.term .ans{padding-left:2ch;margin-top:6px}
+/* lists */
+ul.qs{list-style:none;padding:0}
+ul.qs li{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:0 0 10px}
+ol.order{padding-left:1.6em}
+ol.order li{margin:.65em 0}
+ol.order .chk{color:var(--ink2)}
+ul.fixed li{margin:.45em 0}
+/* picks bar */
+.picks{position:sticky;bottom:0;z-index:5;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin:48px -12px 0;padding:10px 14px;background:var(--card);border:1px solid var(--line2);border-bottom:0;border-radius:10px 10px 0 0;box-shadow:0 -6px 18px rgba(0,0,0,.08)}
+.picks code{font-size:.98rem;font-weight:700;user-select:all;background:var(--codebg)}
+.picks .hint{flex:1 1 220px}
+.picks button{font:600 .85rem/1 var(--sans);padding:8px 14px;border-radius:6px;border:1px solid var(--acc);background:var(--acc);color:var(--on-acc);cursor:pointer}
+.pore .rels{fill:var(--s-accent);opacity:.85}
+.dg.sm text{font-size:9px}
+.mini.split{display:grid;grid-template-columns:1fr 1fr}
+.mini .day .hl{color:#25223a;font-size:14px}
+.mini .night .hl{color:#e9e7f2;font-size:14px}
+.lk{text-decoration:underline}
+.tb svg{flex:none}
+@media (max-width:860px){
+main{padding:28px 16px 150px}
+.top{grid-template-columns:1fr}
+.sheet-grid{grid-template-columns:3.1em 1fr}.sheet-grid .arr{display:none}.sheet-grid .choice{grid-column:2}
+.piece{grid-template-columns:1fr}
+.picks{margin:40px -4px 0}
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>Design panel: the Importin website</h1>
+<p class="meta">Date: 2026-11-06. Status: proposal, nothing built. Each decision shows its options with a drawn mockup and ends with a recommendation; you decide. Facts about Importin come from <code>README.md</code>, <code>DESIGN.md</code>, <code>HANDOFF.md</code> and <code>docs/store-format.md</code> of glia-org/importin at <code>65d9b27</code> (v0.1.0).</p>
+</header>
+<div class="top">
+<nav class="toc" aria-label="Contents"><div class="box-title">Contents</div><ol>
+<li><a href="#s0">0. What the site is for (write-back)</a></li>
+<li><a href="#s1">1. Decisions</a>
+<div class="toc-decs"><a href="#d1" title="Direction">D1</a><a href="#d2" title="Visual language">D2</a><a href="#d3" title="The piece">D3</a><a href="#d4" title="Colour">D4</a><a href="#d5" title="Sections">D5</a><a href="#d6" title="Where it lives">D6</a><a href="#d7" title="Mark">D7</a><a href="#d8" title="Pictures of the real thing">D8</a></div></li>
+<li><a href="#s2">2. Fixed, whatever the picks</a></li>
+<li><a href="#s3">3. Open questions for the user</a></li>
+<li><a href="#s4">4. Build order, each step with its check</a></li>
+</ol></nav>
+<aside class="sheet" aria-label="Decision sheet"><div class="sheet-head"><div class="box-title">Decision sheet</div><div class="hint">Recommended picks; answer with one id per decision.</div></div>
+<div class="sheet-grid">
+<a class="num" href="#d1">D1</a><span class="what">Direction</span><span class="arr">→</span><span class="choice"><strong>A</strong>, the pore: a drawn nuclear pore as the hero, the facts below</span>
+<a class="num" href="#d2">D2</a><span class="what">Visual language</span><span class="arr">→</span><span class="choice"><strong>V2</strong>, serif prose, mono for code and transcripts</span>
+<a class="num" href="#d3">D3</a><span class="what">The piece</span><span class="arr">→</span><span class="choice"><strong>P1</strong>, the pore in motion; P2 further down only if cheap</span>
+<a class="num" href="#d4">D4</a><span class="what">Colour</span><span class="arr">→</span><span class="choice"><strong>C1</strong>, light by day and dark by night, as the system is; one accent</span>
+<a class="num" href="#d5">D5</a><span class="what">Sections</span><span class="arr">→</span><span class="choice"><strong>S1</strong>, seven sections, each a headline and at most four points</span>
+<a class="num" href="#d6">D6</a><span class="what">Where it lives</span><span class="arr">→</span><span class="choice"><strong>H1</strong>, <code>site/</code> in glia-org/importin, made public <span class="badge block">blocking</span></span>
+<a class="num" href="#d7">D7</a><span class="what">Mark</span><span class="arr">→</span><span class="choice"><strong>M1</strong>, the pore ring: eight bars around a dot</span>
+<a class="num" href="#d8">D8</a><span class="what">Pictures</span><span class="arr">→</span><span class="choice"><strong>R2</strong> now, a drawn stand-in; R1 before publishing</span>
+</div>
+<div class="sheet-grid qgrid">
+<a class="num q" href="#q1">Q1</a><span>Make glia-org/importin public now?</span>
+<a class="num q" href="#q2">Q2</a><span>May the store statistics stay in the repository, and in its history?</span>
+<a class="num q" href="#q3">Q3</a><span>May a real screenshot (R1) be staged on the synthetic store?</span>
+<a class="num q" href="#q4">Q4</a><span>May the speed figures name the size of your store?</span>
+</div>
+<p class="answer">Answer line for the recommended set: <code>A V2 P1 C1 S1 H1 M1 R2</code></p>
+</aside>
+</div>
+
+<section id="s0"><h2>0. What the site is for (write-back)</h2>
+<p><strong>What it is for.</strong> One page for Importin, like the pages of Lemna and Glia: what it reads, what it can never do, how to install it and add it to an MCP host. glia-org publishes it on GitHub Pages; with H1 at <code>https://glia-org.github.io/importin/</code>, beside Lemna's at <code>https://glia-org.github.io/lemna/</code>.</p>
+<p class="assumed"><span class="badge">assumed</span> <strong>Who reads it.</strong> People choosing an MCP server for Apple Mail on a Mac, and people whose agent (opencode, Claude Code, Claude Desktop) should read their mail. Both decide on the same three things: what the server can reach, what it can never do, and what to paste where.</p>
+<p><strong>Fixed by the family.</strong> The glia site's rules 1–8 (<code>glia.github.io/README.md</code>), with Lemna's page as the nearest model: plain static files, no third-party requests, every claim true of the build, plain wording, nothing behind a switch, no real data, complete without JavaScript, the product's own look. Section 2 restates them for this page. Rule 8 (the product's own look) has no Importin equivalent yet: D2, D4 and D7 decide it.</p>
+<div class="table-wrap"><table>
+<caption class="vh">The two family pages this one joins</caption>
+<thead><tr><th scope="col"></th><th scope="col">Lemna</th><th scope="col">Glia</th></tr></thead>
+<tbody>
+<tr><th scope="row">repository</th><td><code>site/</code> in glia-org/lemna, public</td><td>glia-org/glia.github.io, private</td></tr>
+<tr><th scope="row">live</th><td><code>https://glia-org.github.io/lemna/</code>, published by <code>.github/workflows/pages.yml</code> from <code>site/</code></td><td>with Glia's public release</td></tr>
+<tr><th scope="row">type</th><td>Literata, self-hosted (224 kB, Latin characters); Menlo or the system mono for keys</td><td>Cascadia Code, self-hosted (219 kB), one mono font throughout</td></tr>
+<tr><th scope="row">colour</th><td>paper by day, warm dark by night, as the system is</td><td>nine terminal schemes, Tokyo Night by default</td></tr>
+<tr><th scope="row">the one piece</th><td>a live demo of the box over an app window</td><td>the astrocyte field with calcium waves (WebGL 2)</td></tr>
+<tr><th scope="row">pictures</th><td>stills of the app for readers without JavaScript</td><td>a drawn stand-in, labelled as such, until the real clip exists</td></tr>
+</tbody></table></div>
+<div class="warnbox"><div class="rec-label">Blocking fact</div>
+<p><strong>The page needs a public repository.</strong> GitHub Pages serves a site from a private repository only on a paid plan (Pro, Team, Enterprise). glia-org is on the free plan (<code>gh api orgs/glia-org</code> answers <code>plan: free</code>, checked 2026-11-06; HANDOFF.md also calls it a free-plan org), and glia-org/importin is private. So the page goes live only from a public repository: D6.</p>
+<p>The same holds for the download. A reader without access to the private repository cannot fetch the release zips, and <code>cargo install importin</code> waits for the crates.io publish. Today the page could offer a stranger no way to install Importin.</p></div>
+<p><strong>Success looks like:</strong> on the first screen a reader learns what Importin reads and that it cannot write; in the install section, which line to paste for their host; the page passes <code>tools/check.py</code>, and nothing on it comes from a real mailbox.</p>
+</section>
+
+<section id="s1"><h2>1. Decisions</h2>
+<p class="lede">Every option has a short id. Pick one per decision with its radio button, or answer in the chat with one id per decision, for example <code>A V2 P1 C1 S1 H1 M1 R2</code>. D2 to D8 are worked out for direction A; for B or C they are re-cut.</p>
+<article class="dec" id="d1">
+<div class="dec-h"><span class="dnum">D1</span><h3>Direction: what the first screen is</h3></div>
+<p class="lede">Three ideas for the whole page, with the same content and the same rules. Each mockup is drawn in the D4 palette, so it follows this panel's light or dark appearance.</p>
+<div class="opts">
+<div class="opt" id="opt-A">
+<div class="opt-h"><span class="oid">A</span><h4>The pore</h4><span class="pill-rec">recommended</span><label class="pick"><input type="radio" name="d1" value="A" checked> pick A</label></div>
+<div class="mini" role="img" aria-label="Mockup of direction A: the mark and name, a drawn nuclear pore with letters drifting toward it, the headline, a download button, then the facts">
+<div class="mini-bar" aria-hidden="true"><i></i><i></i><i></i><span>glia-org.github.io/importin/</span></div>
+<div class="mini-body" aria-hidden="true">
+<div class="brand"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor" aria-hidden="true"><g transform="translate(16 16)"><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(0)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(45)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(90)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(135)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(180)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(225)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(270)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(315)"/><circle r="3"/></g></svg>Importin</div>
+<svg class="pore " viewBox="-240 -100 480 200" role="img" aria-label="A drawn nuclear pore, seen from above: a ring of eight subunits; three letters with address tags drift toward it, each cradled by an importin"><rect class="bg" x="-240" y="-100" width="480" height="200"/><g class="far"><g transform="translate(-200 70) scale(0.28)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(205 -70) scale(0.22)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(215 72) scale(0.18)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g></g><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/><g transform="translate(-178 -38) rotate(4) scale(1)"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g transform="translate(156 -58) rotate(-5) scale(1)"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g transform="translate(-74 -34) rotate(7) scale(0.82)"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><circle class="rels" r="4.5"/></svg>
+<p class="hl">A read-only MCP server for Apple Mail</p>
+<p>It reads what Mail.app keeps on this Mac and gives an AI agent six tools to find and read messages, S/MIME-encrypted ones included. It cannot send, move, flag or delete mail.</p>
+<p class="get"><span class="btn">Download v0.1.0</span><span class="lnk">Source on GitHub</span></p>
+<p class="sec">What it does</p>
+<ul><li>Six tools: <code>search</code>, <code>get_email</code>, <code>get_thread</code>, <code>attachment_text</code>, <code>list_mailboxes</code>, <code>list_accounts</code>.</li><li>S/MIME decrypted per request by macOS's <code>security cms</code>.</li><li>A test greps the source for write paths.</li></ul>
+<div class="bars"><b style="width:92%"></b><b style="width:70%"></b></div>
+</div></div>
+<p>The hero is a drawn nuclear pore, a ring in the nuclear envelope. Letters with an address tag are carried in through it, each by an importin, and released inside; nothing travels out. SVG with CSS motion; reduced motion shows a still. Below it, the page is the facts.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>It is the name, drawn: the page explains “importin” without a paragraph. Traffic in one direction shows read-only without saying it twice. It is the family's one piece, like Lemna's demo and Glia's astrocytes.</dd></div>
+<div class="w"><dt>Weakness</dt><dd>The most work: the drawing, its motion and its still. A metaphor needs one plain sentence beside it, or it reads as decoration. The biology is simplified: in the cell the importin itself goes back out; the drawing leaves that out.</dd></div></dl>
+<p class="note">Variant: the pore in section, with the nuclear envelope drawn as the rule between the hero and the facts, so that the facts sit inside. Answer <code>A-section</code> for it.</p>
+</div>
+
+<div class="opt" id="opt-B">
+<div class="opt-h"><span class="oid">B</span><h4>The transcript</h4><label class="pick"><input type="radio" name="d1" value="B"> pick B</label></div>
+<div class="mini mono" role="img" aria-label="Mockup of direction B: the name and headline in mono, then a transcript of a search call and its JSON reply and a get_email call with To, Cc, Bcc and encryption decrypted true">
+<div class="mini-bar" aria-hidden="true"><i></i><i></i><i></i><span>glia-org.github.io/importin/</span></div>
+<div class="mini-body" aria-hidden="true">
+<div class="brand"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor" aria-hidden="true"><g transform="translate(16 16)"><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(0)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(45)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(90)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(135)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(180)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(225)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(270)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(315)"/><circle r="3"/></g></svg>importin</div>
+<p class="hl">A read-only MCP server for Apple Mail</p>
+<pre class="tx"><span class="c">→ search</span> {"query": "budget",
+  "after": "2026-10-01"}
+← {"hits": [{"id": 4182,
+  "subject": "Budget 2027, second draft",
+  "from": {"name": "Max Mustermann",
+    "address": "max.mustermann@example.org"},
+  "mailbox": "INBOX", "encrypted": true, …}],
+  "truncated": false}
+<span class="c">→ get_email</span> {"id": 4182}
+← {"to": [{"name": "Erika Muster",
+    "address": "erika.muster@example.org"}],
+  "cc": [{"name": "Lab office",
+    "address": "office@example.org"}],
+  "bcc": [],
+  "encryption": {"encrypted": true,
+    "decrypted": true, "method": "security",
+    "signature": "not verified"}, …}<span class="caret"></span></pre>
+<div class="bars"><b style="width:88%"></b><b style="width:60%"></b></div>
+</div></div>
+<p>The hero is an MCP transcript set in mono: a <code>search</code> call and its JSON reply on synthetic data, then <code>get_email</code> with To, Cc and Bcc and <code>encryption: {decrypted: true}</code>. No motion beyond a typed-in effect.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Shows the tool shapes exactly: a reader sees what their agent will get. Cheap, and true by construction when the reply is generated from the test store.</dd></div>
+<div class="w"><dt>Weakness</dt><dd>Looks like documentation. No image to share. JSON is dense on a phone, and the typed-in effect is a second motion to switch off.</dd></div></dl>
+</div>
+
+<div class="opt" id="opt-C">
+<div class="opt-h"><span class="oid">C</span><h4>The gate</h4><label class="pick"><input type="radio" name="d1" value="C"> pick C</label></div>
+<div class="mini col" role="img" aria-label="Mockup of direction C: one serif column; the lead says Importin cannot send, move, flag or delete mail; one still figure of the data path from Mail.app's store through importin to the MCP host">
+<div class="mini-bar" aria-hidden="true"><i></i><i></i><i></i><span>glia-org.github.io/importin/</span></div>
+<div class="mini-body" aria-hidden="true">
+<div class="brand"><svg viewBox="0 0 32 32" width="14" height="14" fill="currentColor" aria-hidden="true"><g transform="translate(16 16)"><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(0)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(45)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(90)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(135)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(180)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(225)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(270)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(315)"/><circle r="3"/></g></svg>Importin</div>
+<p class="hl">Importin cannot send, move, flag or delete mail.</p>
+<p>It reads the Envelope Index and the <code>.emlx</code> files that Mail.app keeps on this Mac, and gives an AI agent six tools to find and read them. No code path writes; a test greps the source to keep it so.</p>
+<svg class="dg sm" viewBox="0 0 320 70" role="img" aria-label="Data path: Mail.app writes its store, the Envelope Index and the .emlx files; importin reads them, read-only, and answers the MCP host"><defs><marker id="ah-c" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="ah" d="M0 0 10 5 0 10z"/></marker><marker id="ah-ca" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path class="aha" d="M0 0 10 5 0 10z"/></marker></defs><rect class="bg" x="0" y="0" width="320" height="70" rx="6"/><rect class="bx" x="4" y="12" width="56" height="36" rx="5"/><text x="32" y="33.5" text-anchor="middle">Mail.app</text><rect class="bx" x="78" y="12" width="80" height="36" rx="5"/><text x="118" y="27" text-anchor="middle">Envelope Index</text><text x="118" y="40" text-anchor="middle" class="m">.emlx files</text><rect class="bxa" x="176" y="12" width="62" height="36" rx="5"/><text x="207" y="33.5" text-anchor="middle" class="b">importin</text><rect class="bx" x="256" y="12" width="60" height="36" rx="5"/><text x="286" y="33.5" text-anchor="middle">MCP host</text><path class="ln" d="M60 30H76" marker-end="url(#ah-c)"/><path class="ln" d="M158 30H174" marker-end="url(#ah-c)"/><path class="lna" d="M238 30H254" marker-end="url(#ah-ca)"/><text x="207" y="62" text-anchor="middle" class="mu">read-only</text></svg>
+<div class="bars"><b style="width:96%"></b><b style="width:90%"></b><b style="width:94%"></b><b style="width:55%"></b></div>
+<p class="sec">Install</p>
+<div class="bars"><b style="width:84%"></b><b style="width:66%"></b></div>
+</div></div>
+<p>An editorial page in one column like Lemna's, serif, with the read-only guarantee as the lead and one still figure of the data path: Mail.app's store, the Envelope Index and the <code>.emlx</code> files, importin, the MCP host.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Cheapest. The guarantee comes first. Reads well on a phone.</dd></div>
+<div class="w"><dt>Weakness</dt><dd>Least distinctive: Lemna's layout without Lemna's demo. Nothing on it says the name.</dd></div></dl>
+</div>
+</div>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>A, the pore.</strong> It is the name; it shows read-only without saying it twice; it is the family's one piece. If the motion proves too costly, A falls back to P3 (D3): the same page with the pore as a still. B's transcript is kept as P2, a second figure further down.</p></div>
+</article>
+<article class="dec" id="d2">
+<div class="dec-h"><span class="dnum">D2</span><h3>Visual language: the faces</h3></div>
+<p class="lede">The same headline, sentence and snippet in each. The specimens use system stand-ins (Iowan Old Style or Charter for Literata, the system mono for Cascadia Code), because this panel loads no fonts.</p>
+<div class="opts">
+<div class="opt" id="opt-V1">
+<div class="opt-h"><span class="oid">V1</span><h4>Mono throughout</h4><label class="pick"><input type="radio" name="d2" value="V1"> pick V1</label></div>
+<div class="spec v1"><p class="sh">Six tools for the mail on this Mac</p><p><code>search</code> finds messages by sender, recipient, Cc, subject, date and mailbox; <code>get_email</code> reads one, S/MIME-encrypted ones included.</p><pre>claude mcp add --scope user mail -- ~/.cargo/bin/importin</pre></div>
+<p>Cascadia Code, self-hosted as Glia does (219 kB), or the system mono with nothing to download.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Kin to Glia; fits an MCP server; prose and snippets share one rhythm.</dd></div><div class="w"><dt>Weakness</dt><dd>Prose in mono reads slower, and this page is mostly prose. A second mono page in the family makes Importin look like part of Glia.</dd></div></dl>
+</div>
+<div class="opt" id="opt-V2">
+<div class="opt-h"><span class="oid">V2</span><h4>Serif prose, mono for code</h4><span class="pill-rec">recommended</span><label class="pick"><input type="radio" name="d2" value="V2" checked> pick V2</label></div>
+<div class="spec v2"><p class="sh">Six tools for the mail on this Mac</p><p><code>search</code> finds messages by sender, recipient, Cc, subject, date and mailbox; <code>get_email</code> reads one, S/MIME-encrypted ones included.</p><pre>claude mcp add --scope user mail -- ~/.cargo/bin/importin</pre></div>
+<p>Literata for prose and headlines, self-hosted: the Latin file Lemna already serves (224 kB) with its OFL text. Code and transcripts in Menlo or the system mono, none downloaded.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>The page is read, the code is shown: what you paste stands apart from what you read. Kin to Lemna, and one file to reuse.</dd></div><div class="w"><dt>Weakness</dt><dd>224 kB on first load. Close to Lemna's look, so the pore and the colour have to tell the two apart.</dd></div></dl>
+</div>
+<div class="opt" id="opt-V3">
+<div class="opt-h"><span class="oid">V3</span><h4>System sans-serif</h4><label class="pick"><input type="radio" name="d2" value="V3"> pick V3</label></div>
+<div class="spec v3"><p class="sh">Six tools for the mail on this Mac</p><p><code>search</code> finds messages by sender, recipient, Cc, subject, date and mailbox; <code>get_email</code> reads one, S/MIME-encrypted ones included.</p><pre>claude mcp add --scope user mail -- ~/.cargo/bin/importin</pre></div>
+<p>The system face (San Francisco on a Mac), with nothing to download.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>No font file; neutral; looks native on a Mac.</dd></div><div class="w"><dt>Weakness</dt><dd>Not family: neither Lemna's serif nor Glia's mono. Most product pages already look like this.</dd></div></dl>
+</div>
+</div>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>V2.</strong> The page is read and the code is shown, so the two get different faces. It is Lemna's pairing and Lemna's font file, which keeps the family close and costs no new licence.</p></div>
+</article>
+
+<article class="dec" id="d3">
+<div class="dec-h"><span class="dnum">D3</span><h3>The piece: one figure that is the product's own idea</h3></div>
+<p class="lede">One piece only, as on the other two pages. Whichever it is, it works without JavaScript and stands still under reduced motion.</p>
+<div class="opts">
+<div class="opt wide" id="opt-P1">
+<div class="opt-h"><span class="oid">P1</span><h4>The pore, in motion</h4><span class="pill-rec">recommended with A</span><label class="pick"><input type="radio" name="d3" value="P1" checked> pick P1</label></div>
+<div class="piece">
+<figure><svg class="pore moving" viewBox="-240 -140 480 280" role="img" aria-label="The pore sketch in motion: letters with address tags, each cradled by an importin, move in toward the ring of eight subunits and are released at its centre; nothing moves outward"><rect class="bg" x="-240" y="-140" width="480" height="280"/><g class="far"><g transform="translate(-185 92) scale(0.3)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(196 -98) scale(0.26)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(214 100) scale(0.2)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(-212 -112) scale(0.18)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g></g><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/><circle class="rel r1" r="5"/><circle class="rel r2" r="5"/><circle class="rel r3" r="5"/><circle class="rel r4" r="5"/><g class="cargo c1"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g class="cargo c2"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g class="cargo c3"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g class="cargo c4"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><text class="lab" x="-228" y="-120">the nuclear envelope, seen from the cytoplasm</text><text class="lab" x="228" y="128" text-anchor="end">through the pore lies the nucleus</text></svg>
+<label class="pausectl"><input type="checkbox"> pause the motion</label>
+<figcaption>The sketch as it moves. Reduced motion pauses it.</figcaption></figure>
+<figure><svg class="pore still" viewBox="-240 -140 480 280" role="img" aria-label="The same sketch as reduced motion shows it: four letters frozen at different points of their way in"><rect class="bg" x="-240" y="-140" width="480" height="280"/><g class="far"><g transform="translate(-185 92) scale(0.3)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(196 -98) scale(0.26)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(214 100) scale(0.2)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g><g transform="translate(-212 -112) scale(0.18)"><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/></g></g><circle class="rim" r="94"/><circle class="chan" r="52"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(22.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(67.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(112.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(157.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(202.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(247.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(292.5)"/><path class="mesh" d="M0-50q5 7 0 13t0 13t0 11" transform="rotate(337.5)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(0)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(45)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(90)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(135)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(180)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(225)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(270)"/><rect class="sub" x="-12" y="-86" width="24" height="40" rx="10" transform="rotate(315)"/><circle class="rel r1" r="5"/><circle class="rel r2" r="5"/><circle class="rel r3" r="5"/><circle class="rel r4" r="5"/><g class="cargo c1"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g class="cargo c2"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g class="cargo c3"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g><g class="cargo c4"><g class="env"><path class="imp" d="M-15 10Q0 22 15 10"/><rect x="-12" y="-8" width="24" height="16" rx="2"/><path class="flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="str" d="M9-5.5 14.5-12"/><rect class="tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g></g></svg>
+<figcaption>The still that reduced motion shows: every letter paused at a different point of its way in.</figcaption></figure>
+</div>
+<p>A ring of eight subunits, the nuclear pore's eightfold symmetry, seen from the cytoplasm. Each letter carries its address tag and lies in an importin, the arc under it. The letters move in, and at the centre each one is released into the nucleus below the pore. Nothing moves out. On the site this is inline SVG with CSS keyframes, no canvas and no script: this sketch is about 9 kB of markup and 5 kB of keyframes. A pause control is there for readers who keep motion on (WCAG 2.2.2 asks for one when motion runs longer than five seconds).</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Says the name and read-only in one drawing. Light: no WebGL, no script. Its still is the mark (M1).</dd></div><div class="w"><dt>Weakness</dt><dd>Has to stay calm: four letters at most, slow, nothing that flashes. The arc and the tag need the caption to be read as importin and address tag.</dd></div></dl>
+</div>
+
+<div class="opt wide" id="opt-P2">
+<div class="opt-h"><span class="oid">P2</span><h4>An interactive transcript</h4><label class="pick"><input type="radio" name="d3" value="P2"> pick P2</label></div>
+<div class="txd">
+<input class="vh" type="radio" name="tx" id="tx1" checked aria-label="search"><input class="vh" type="radio" name="tx" id="tx2" aria-label="get_email"><input class="vh" type="radio" name="tx" id="tx3" aria-label="get_thread"><input class="vh" type="radio" name="tx" id="tx4" aria-label="attachment_text"><input class="vh" type="radio" name="tx" id="tx5" aria-label="list_mailboxes"><input class="vh" type="radio" name="tx" id="tx6" aria-label="list_accounts">
+<div class="txd-tabs" aria-hidden="true"><label for="tx1">search</label><label for="tx2">get_email</label><label for="tx3">get_thread</label><label for="tx4">attachment_text</label><label for="tx5">list_mailboxes</label><label for="tx6">list_accounts</label></div>
+<div class="txd-panes">
+<pre class="t1"><span class="c">→ search</span> {"query": "budget", "after": "2026-10-01", "limit": 5}
+← {
+  "hits": [
+    {
+      "id": 4182,
+      "date_received": "2026-10-14T09:12:40+02:00",
+      "date_sent": "2026-10-14T09:12:31+02:00",
+      "subject": "Budget 2027, second draft",
+      "from": {"name": "Max Mustermann", "address": "max.mustermann@example.org"},
+      "to": [{"name": "Erika Muster", "address": "erika.muster@example.org"}],
+      "cc": [{"name": "Lab office", "address": "office@example.org"}],
+      "mailbox": "INBOX",
+      "account": "erika.muster@example.org",
+      "read": true,
+      "flagged": false,
+      "conversation_id": 977,
+      "snippet": null,
+      "encrypted": true,
+      "signed": true,
+      "has_attachments": true
+    },
+    {
+      "id": 4107,
+      "date_received": "2026-10-02T16:40:05+02:00",
+      "date_sent": "2026-10-02T16:39:58+02:00",
+      "subject": "Budget 2027, first draft",
+      "from": {"name": "Max Mustermann", "address": "max.mustermann@example.org"},
+      "to": [{"name": "Erika Muster", "address": "erika.muster@example.org"}],
+      "cc": [],
+      "mailbox": "INBOX",
+      "account": "erika.muster@example.org",
+      "read": true,
+      "flagged": true,
+      "conversation_id": 977,
+      "snippet": "Here is a first draft of the budget; travel is still missing.",
+      "encrypted": false,
+      "signed": false,
+      "has_attachments": true
+    }
+  ],
+  "scanned": null,
+  "candidates_total": null,
+  "truncated": false,
+  "hint": null,
+  "skipped": 0
+}</pre>
+<pre class="t2"><span class="c">→ get_email</span> {"id": 4182}
+← {
+  "id": 4182,
+  "message_id": "20261014071231.4182@example.org",
+  "in_reply_to": "20261002143958.4107@example.org",
+  "conversation_id": 977,
+  "date_sent": "2026-10-14T09:12:31+02:00",
+  "date_received": "2026-10-14T09:12:40+02:00",
+  "subject": "Budget 2027, second draft",
+  "from": {"name": "Max Mustermann", "address": "max.mustermann@example.org"},
+  "to": [{"name": "Erika Muster", "address": "erika.muster@example.org"}],
+  "cc": [{"name": "Lab office", "address": "office@example.org"}],
+  "bcc": [],
+  "reply_to": [],
+  "mailbox": "INBOX",
+  "account": "erika.muster@example.org",
+  "read": true,
+  "flagged": false,
+  "body": "Erika,\n\nthe second draft is attached. Travel is now in, at 4 200 EUR.\n\nMax",
+  "body_html": null,
+  "body_source": "plain",
+  "truncated": false,
+  "encryption": {
+    "encrypted": true,
+    "decrypted": true,
+    "method": "security",
+    "signed": true,
+    "signature": "not verified",
+    "error": null
+  },
+  "attachments": [
+    {"index": 0, "part": "2", "filename": "budget-2027-v2.pdf", "mime_type": "application/pdf", "size": 48213, "state": "inline"}
+  ]
+}</pre>
+<pre class="t3"><span class="c">→ get_thread</span> {"id": 4182}
+← {
+  "messages": [
+    {"id": 4107, "date_received": "2026-10-02T16:40:05+02:00", "date_sent": "2026-10-02T16:39:58+02:00",
+     "subject": "Budget 2027, first draft",
+     "from": {"name": "Max Mustermann", "address": "max.mustermann@example.org"},
+     "to": [{"name": "Erika Muster", "address": "erika.muster@example.org"}], "cc": [],
+     "mailbox": "INBOX", "account": "erika.muster@example.org", "read": true, "flagged": true,
+     "conversation_id": 977, "snippet": "Here is a first draft of the budget; travel is still missing.",
+     "encrypted": false, "signed": false, "has_attachments": true},
+    {"id": 4182, "date_received": "2026-10-14T09:12:40+02:00", "date_sent": "2026-10-14T09:12:31+02:00",
+     "subject": "Budget 2027, second draft",
+     "from": {"name": "Max Mustermann", "address": "max.mustermann@example.org"},
+     "to": [{"name": "Erika Muster", "address": "erika.muster@example.org"}],
+     "cc": [{"name": "Lab office", "address": "office@example.org"}],
+     "mailbox": "INBOX", "account": "erika.muster@example.org", "read": true, "flagged": false,
+     "conversation_id": 977, "snippet": null,
+     "encrypted": true, "signed": true, "has_attachments": true}
+  ],
+  "truncated": false
+}</pre>
+<pre class="t4"><span class="c">→ attachment_text</span> {"id": 4182, "filename": "budget-2027-v2.pdf"}
+← {
+  "filename": "budget-2027-v2.pdf",
+  "mime_type": "application/pdf",
+  "state": "inline",
+  "text": "Budget 2027, second draft\nPersonnel 61 500 EUR\nConsumables 12 800 EUR\nTravel 4 200 EUR\nTotal 78 500 EUR",
+  "truncated": false,
+  "note": null
+}</pre>
+<pre class="t5"><span class="c">→ list_mailboxes</span> {}
+← {
+  "mailboxes": [
+    {"name": "INBOX", "url": "mailbox://0A1B2C3D-0000-4000-8000-000000000001/INBOX",
+     "account": "erika.muster@example.org", "messages": 1412, "unread": 9},
+    {"name": "Sent Messages", "url": "mailbox://0A1B2C3D-0000-4000-8000-000000000001/Sent%20Messages",
+     "account": "erika.muster@example.org", "messages": 388, "unread": 0},
+    {"name": "Projects/Budget", "url": "mailbox://0A1B2C3D-0000-4000-8000-000000000001/Projects/Budget",
+     "account": "erika.muster@example.org", "messages": 200, "unread": 1}
+  ]
+}</pre>
+<pre class="t6"><span class="c">→ list_accounts</span> {}
+← {
+  "accounts": [
+    {
+      "identifier": "erika.muster@example.org",
+      "label": "Work",
+      "kind": "IMAP",
+      "uuid": "0A1B2C3D-0000-4000-8000-000000000001",
+      "user": "",
+      "host": "",
+      "scheme": "mailbox",
+      "mailboxes": 3,
+      "messages": 2000
+    }
+  ]
+}</pre>
+</div></div>
+<p>Pick one of the six tools and see its reply on synthetic data. On the site the replies are a fixture inlined in the page; no server. This panel's version needs no script: six radio buttons and CSS. Its replies are written by hand from the result structs in <code>src/read.rs</code>, <code>src/envelope.rs</code>, <code>src/mime.rs</code> and <code>src/attach.rs</code>; the site's would be produced by importin from the synthetic test store, so that they stay true.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Shows every tool's reply exactly; works without JavaScript; about 6 kB.</dd></div><div class="w"><dt>Weakness</dt><dd>The fixture has to be regenerated when a reply changes shape. Pretty-printed JSON is long on a phone.</dd></div></dl>
+</div>
+
+<div class="opt wide" id="opt-P3">
+<div class="opt-h"><span class="oid">P3</span><h4>A still diagram only</h4><label class="pick"><input type="radio" name="d3" value="P3"> pick P3</label></div>
+<figure><svg class="dg" viewBox="0 0 960 200" role="img" aria-label="Data path: Mail.app writes its store in ~/Library/Mail/V10, the Envelope Index and the .emlx files; importin reads it read-only and answers the MCP host over stdio; for S/MIME it calls /usr/bin/security cms with your keychain identity"><defs><marker id="ah-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0 0 10 5 0 10z"/></marker><marker id="ah-pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="aha" d="M0 0 10 5 0 10z"/></marker></defs><rect class="bg" x="0" y="0" width="960" height="200" rx="8"/><rect class="bx" x="16" y="24" width="120" height="72" rx="8"/><text x="76" y="56" text-anchor="middle" class="b">Mail.app</text><text x="76" y="76" text-anchor="middle" class="mu">writes its store</text><rect class="bx" x="176" y="24" width="230" height="72" rx="8"/><text x="291" y="48" text-anchor="middle" class="m">~/Library/Mail/V10</text><text x="291" y="68" text-anchor="middle">Envelope Index (SQLite)</text><text x="291" y="86" text-anchor="middle">.emlx message files</text><rect class="bxa" x="450" y="24" width="190" height="72" rx="8"/><text x="545" y="50" text-anchor="middle" class="b">importin</text><text x="545" y="70" text-anchor="middle" class="mu">six tools</text><text x="545" y="87" text-anchor="middle" class="m mu">read-only open</text><rect class="bx" x="684" y="24" width="260" height="72" rx="8"/><text x="814" y="50" text-anchor="middle" class="b">MCP host</text><text x="814" y="70" text-anchor="middle" class="mu">opencode, Claude Code,</text><text x="814" y="87" text-anchor="middle" class="mu">Claude Desktop</text><path class="ln" d="M136 60H174" marker-end="url(#ah-p)"/><path class="ln" d="M406 60H448" marker-end="url(#ah-p)"/><path class="lna" d="M640 60H682" marker-end="url(#ah-pa)"/><text x="427" y="50" text-anchor="middle" class="mu">reads</text><text x="662" y="50" text-anchor="middle" class="mu">stdio</text><path class="ln" d="M545 96V128"/><rect class="bx" x="450" y="128" width="190" height="56" rx="8"/><text x="545" y="152" text-anchor="middle" class="m">security cms -D</text><text x="545" y="171" text-anchor="middle" class="mu">your keychain identity</text><rect class="no" x="176" y="128" width="230" height="56" rx="8"/><text x="291" y="152" text-anchor="middle" class="mu">no write path, no network,</text><text x="291" y="171" text-anchor="middle" class="mu">no index of its own</text></svg></figure>
+<p>The data path as a still figure, and no other piece: Mail.app writes its store, importin reads it and answers the MCP host; S/MIME goes through <code>security cms</code>.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Cheapest; exact; says where the data goes.</dd></div><div class="w"><dt>Weakness</dt><dd>No piece: the page looks like documentation, and nothing on it says the name.</dd></div></dl>
+</div>
+</div>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>P1 with A.</strong> P2 as a second figure below the facts only if cheap; drawn as here, without script and at about 6 kB, it probably is. Answer <code>P1+P2</code> to have both.</p></div>
+</article>
+<article class="dec" id="d4">
+<div class="dec-h"><span class="dnum">D4</span><h3>Colour</h3></div>
+<p class="lede">One hue, two stains. By day the accent is hematoxylin, the stain that turns nuclei blue-violet on a slide, on a ground with eosin's faint pink; by night it is DAPI, the nuclear stain that glows blue under a fluorescence microscope, on the dark of such an image. The accent marks links, keyboard focus, and the importin and its tag in the drawing; headlines stay in the text colour.</p>
+<div class="opts">
+<div class="opt" id="opt-C1">
+<div class="opt-h"><span class="oid">C1</span><h4>Light by day, dark by night</h4><span class="pill-rec">recommended</span><label class="pick"><input type="radio" name="d4" value="C1" checked> pick C1</label></div>
+<div class="mini split" role="img" aria-label="The same page piece twice: on the light ground with the hematoxylin accent, and on the dark ground with the DAPI accent">
+<div class="mini-body day" aria-hidden="true"><p class="hl">Six tools</p><p>Read one message, S/MIME ones included.</p><p class="lk">Release notes</p></div>
+<div class="mini-body night" aria-hidden="true"><p class="hl">Six tools</p><p>Read one message, S/MIME ones included.</p><p class="lk">Release notes</p></div>
+</div>
+<p>The page follows the system's appearance (<code>prefers-color-scheme</code>), as Lemna's does. No switch on the page.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Matches the reader's Mac and Lemna's pattern.</dd></div><div class="w"><dt>Weakness</dt><dd>Two palettes to check, and the piece drawn for both grounds.</dd></div></dl>
+</div>
+<div class="opt" id="opt-C2">
+<div class="opt-h"><span class="oid">C2</span><h4>Dark only</h4><label class="pick"><input type="radio" name="d4" value="C2"> pick C2</label></div>
+<div class="mini" role="img" aria-label="The page piece on the dark ground only"><div class="mini-body night" aria-hidden="true"><p class="hl">Six tools</p><p>Read one message, S/MIME ones included.</p><p class="lk">Release notes</p></div></div>
+<p>The fluorescence look at all hours.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>One palette to check; the glowing accent suits the drawing.</dd></div><div class="w"><dt>Weakness</dt><dd>Ignores a reader's light Mac; long prose on dark reads less well by day.</dd></div></dl>
+</div>
+<div class="opt" id="opt-C3">
+<div class="opt-h"><span class="oid">C3</span><h4>Light only</h4><label class="pick"><input type="radio" name="d4" value="C3"> pick C3</label></div>
+<div class="mini" role="img" aria-label="The page piece on the light ground only"><div class="mini-body day" aria-hidden="true"><p class="hl">Six tools</p><p>Read one message, S/MIME ones included.</p><p class="lk">Release notes</p></div></div>
+<p>The slide look at all hours.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>One palette to check; closest to a printed page.</dd></div><div class="w"><dt>Weakness</dt><dd>Glares at night; the family's two other pages both follow the system.</dd></div></dl>
+</div>
+</div>
+
+<div class="pal">
+<div class="pal-g day"><h4>Day: hematoxylin on the slide</h4>
+<div class="chips">
+<div class="chip"><i style="background:#f7f3f2"></i><b>ground</b><code>#f7f3f2</code></div>
+<div class="chip"><i style="background:#efe8e8"></i><b>surface</b><code>#efe8e8</code> code, transcripts</div>
+<div class="chip"><i style="background:#25223a"></i><b>text</b><code>#25223a</code> 13.92:1</div>
+<div class="chip"><i style="background:#4d4a5e"></i><b>copy</b><code>#4d4a5e</code> 7.76:1</div>
+<div class="chip"><i style="background:#6b6680"></i><b>muted</b><code>#6b6680</code> 4.97:1</div>
+<div class="chip"><i style="background:#4a3d9a"></i><b>accent, nucleus ink</b><code>#4a3d9a</code> 7.86:1</div>
+<div class="chip"><i style="background:#82769c"></i><b>membrane</b><code>#82769c</code> 3.80:1, strokes</div>
+<div class="chip"><i style="background:#f1e0e4"></i><b>cytoplasm</b><code>#f1e0e4</code> drawing fill</div>
+<div class="chip"><i style="background:#e8e5f3"></i><b>nucleoplasm</b><code>#e8e5f3</code> drawing fill</div>
+<div class="chip"><i style="background:#ddd5d6"></i><b>line</b><code>#ddd5d6</code> hairlines</div>
+</div>
+<p>Ratios against the ground. Body copy reads like this, with <span class="lk">a link in the accent</span>.</p></div>
+<div class="pal-g night"><h4>Night: DAPI in the dark field</h4>
+<div class="chips">
+<div class="chip"><i style="background:#13131b"></i><b>ground</b><code>#13131b</code></div>
+<div class="chip"><i style="background:#1c1b26"></i><b>surface</b><code>#1c1b26</code> code, transcripts</div>
+<div class="chip"><i style="background:#e9e7f2"></i><b>text</b><code>#e9e7f2</code> 15.11:1</div>
+<div class="chip"><i style="background:#b2afc4"></i><b>copy</b><code>#b2afc4</code> 8.64:1</div>
+<div class="chip"><i style="background:#8a879c"></i><b>muted</b><code>#8a879c</code> 5.30:1</div>
+<div class="chip"><i style="background:#97a2ff"></i><b>accent, nucleus ink</b><code>#97a2ff</code> 7.85:1</div>
+<div class="chip"><i style="background:#6c6794"></i><b>membrane</b><code>#6c6794</code> 3.52:1, strokes</div>
+<div class="chip"><i style="background:#1f1a26"></i><b>cytoplasm</b><code>#1f1a26</code> drawing fill</div>
+<div class="chip"><i style="background:#191a2c"></i><b>nucleoplasm</b><code>#191a2c</code> drawing fill</div>
+<div class="chip"><i style="background:#2d2c3a"></i><b>line</b><code>#2d2c3a</code> hairlines</div>
+</div>
+<p>Ratios against the ground. Body copy reads like this, with <span class="lk">a link in the accent</span>.</p></div>
+</div>
+<div class="table-wrap"><table>
+<caption class="vh">Contrast ratios of the proposed palette</caption>
+<thead><tr><th scope="col">pair</th><th scope="col">day</th><th scope="col">night</th><th scope="col">use, and the floor it must meet</th></tr></thead>
+<tbody>
+<tr><th scope="row">text on ground</th><td class="num">13.92:1</td><td class="num">15.11:1</td><td>headlines; 4.5:1</td></tr>
+<tr><th scope="row">text on surface</th><td class="num">12.70:1</td><td class="num">13.92:1</td><td>code and keys; 4.5:1</td></tr>
+<tr class="rec-row"><th scope="row">copy on ground</th><td class="num">7.76:1</td><td class="num">8.64:1</td><td>body copy; 4.5:1, and above 7:1</td></tr>
+<tr class="rec-row"><th scope="row">copy on surface</th><td class="num">7.07:1</td><td class="num">7.96:1</td><td>transcript text; 4.5:1</td></tr>
+<tr><th scope="row">muted on ground</th><td class="num">4.97:1</td><td class="num">5.30:1</td><td>captions, footer; 4.5:1</td></tr>
+<tr><th scope="row">muted on surface</th><td class="num">4.53:1</td><td class="num">4.88:1</td><td>notes inside code blocks; 4.5:1</td></tr>
+<tr><th scope="row">accent on ground</th><td class="num">7.86:1</td><td class="num">7.85:1</td><td>links, focus ring; 4.5:1</td></tr>
+<tr><th scope="row">accent on surface</th><td class="num">7.17:1</td><td class="num">7.23:1</td><td>calls in transcripts; 4.5:1</td></tr>
+<tr><th scope="row">accent on cytoplasm</th><td class="num">6.81:1</td><td class="num">7.23:1</td><td>importin and tag in the drawing; 3:1</td></tr>
+<tr><th scope="row">membrane on ground</th><td class="num">3.80:1</td><td class="num">3.52:1</td><td>drawing strokes; 3:1 (WCAG 1.4.11)</td></tr>
+<tr><th scope="row">membrane on cytoplasm</th><td class="num">3.29:1</td><td class="num">3.25:1</td><td>the ring on the drawn envelope; 3:1</td></tr>
+</tbody></table></div>
+<p class="note">WCAG 2.x contrast ratios from sRGB relative luminance, computed with a script, not estimated. The tightest text pair is muted on the day surface (4.53:1); muted is for captions and the footer, never for body copy.</p>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>C1</strong> with the palette above: the reader's Mac decides, as on Lemna's page. The script that computed this table goes into <code>tools/check.py</code>, so a colour change that drops a pair below its floor fails the check.</p></div>
+</article>
+
+<article class="dec" id="d5">
+<div class="dec-h"><span class="dnum">D5</span><h3>Sections</h3></div>
+<p class="lede">What the page says, in order. Per family rule 4, each section is a headline and at most four points. The draft copy comes from the README and DESIGN.md; where it needs something they do not say yet, it is marked.</p>
+<div class="opts two top">
+<div class="opt" id="opt-S1">
+<div class="opt-h"><span class="oid">S1</span><h4>Full: seven sections</h4><span class="pill-rec">recommended</span><label class="pick"><input type="radio" name="d5" value="S1" checked> pick S1</label></div>
+<ol class="outline">
+<li><span class="hd">Lead.</span> “A read-only MCP server for Apple Mail.”
+<ul><li>It reads what Mail.app already keeps on this Mac, the Envelope Index and the <code>.emlx</code> files, and gives an AI agent six tools to find and read messages. It cannot send, move, flag or delete mail.</li><li>Links: the latest release, the source.</li></ul></li>
+<li><span class="hd">The piece</span> (P1), with one plain caption: “Importin reads the address tag on each message and carries it in. Nothing is carried out: it has no way to send, move, flag or delete.”</li>
+<li><span class="hd">What it does</span>
+<ul><li><strong>Six tools.</strong> <code>search</code> by sender, recipient, Cc, subject, date and mailbox, or by words in the body; <code>get_email</code> with To, Cc and Bcc; <code>get_thread</code>; <code>attachment_text</code> for PDF, Word, Excel, PowerPoint, HTML and text; <code>list_mailboxes</code>; <code>list_accounts</code>.</li>
+<li><strong>S/MIME.</strong> Encrypted messages are decrypted per request by macOS's <code>security cms</code> with the identity in your login keychain. The plaintext lives in the reply only, never on disk. Signatures are not verified.</li>
+<li><strong>Read-only.</strong> No code path sends, moves, flags or deletes, and a test greps the source to keep it so. No index to build, no watcher, no network. Accounts in <code>exclude_accounts</code> are invisible to every tool. 186 tests run on a synthetic Mail store.</li>
+<li><strong>Speed</strong>, measured on 2026-11-04 on a Mac with Apple Silicon, macOS 26.5, on a store of ⟨size: Q4⟩ messages: opening the store 3 ms, a header search 2 ms, <code>get_email</code> under 1 ms; a body search read 192 messages in 91 ms.</li></ul></li>
+<li><span class="hd">Install</span>
+<ul><li>Download the zip for Apple Silicon or Intel from the latest release (each <code>v*</code> tag carries both), unzip it, clear the quarantine flag (the binary is not notarised) and put <code>importin</code> on your <code>PATH</code>. Or build it from a checkout: <code>cargo install --path .</code></li>
+<li>Grant Full Disk Access to the app that launches your MCP host: your terminal app for opencode and Claude Code, Claude.app for Claude Desktop. Without it importin exits at startup and says why.</li>
+<li>Add it to your host; all three are shown at once:
+<pre>opencode, in opencode.json
+{
+  "mcp": {
+    "mail": {
+      "type": "local",
+      "command": ["/Users/you/.cargo/bin/importin"],
+      "enabled": true
+    }
+  }
+}
+
+Claude Code
+claude mcp add --scope user mail -- ~/.cargo/bin/importin
+
+Claude Desktop, in claude_desktop_config.json
+(not in the README yet)
+{
+  "mcpServers": {
+    "mail": {"command": "/Users/you/.cargo/bin/importin"}
+  }
+}</pre></li></ul></li>
+<li><span class="hd">Check the setup: <code>importin doctor</code></span>
+<ul><li>A checklist: Full Disk Access, the store, the schema, how message files were found, S/MIME identities, a decrypt probe, timings.</li>
+<li>Run it once from the app that launches your host. The first time, macOS asks whether <code>security</code> may use your key: choose Always Allow.</li>
+<li><code>--anon</code> leaves out account names, paths and addresses; <code>--json</code> prints the same as JSON.</li>
+<li>Exit status 0 when Full Disk Access is granted and the schema resolved, else 2.</li></ul>
+<pre>ok   importin: 0.1.0
+ok   full disk access: ok
+ok   path sample: 20 sampled: 20 formula, 0 walk, 0 missing
+ok   s/mime identities: 1
+ok   decrypt probe (security): 50 ms
+ok   time get_email: 1 ms</pre>
+<span class="note">Line format from <code>src/doctor.rs</code>; values illustrative. The site's sample would be printed by doctor on the test store.</span></li>
+<li><span class="hd">The name</span>
+<ul><li>Importin is a protein. Importin-α reads the nuclear localization signal, the address tag on a cargo protein; importin-β carries the cargo through the gated nuclear pore and releases it inside. Exportins carry the outbound traffic; this program has none.</li></ul></li>
+<li><span class="hd">Footer.</span> Apache-2.0. Literata by the Literata Project Authors, under the SIL Open Font License 1.1. No cookies, no analytics, no third-party requests.</li>
+</ol>
+</div>
+<div class="opt" id="opt-S2">
+<div class="opt-h"><span class="oid">S2</span><h4>Short: five sections</h4><label class="pick"><input type="radio" name="d5" value="S2"> pick S2</label></div>
+<ol class="outline">
+<li><span class="hd">Lead</span>, as in S1.</li>
+<li><span class="hd">The piece</span>, its caption carrying the name in one sentence.</li>
+<li><span class="hd">What it does</span>: the same four points.</li>
+<li><span class="hd">Install</span>: the same three points, ending with one line: “Then run <code>importin doctor</code>.”</li>
+<li><span class="hd">Footer</span>, as in S1.</li>
+</ol>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Shorter to read and to keep true; the first screen and the install are the same as in S1.</dd></div><div class="w"><dt>Weakness</dt><dd>Drops what a stranger needs between installing and trusting it: what doctor checks, the keychain dialog, the exit status. The name gets one sentence, though the whole page is drawn from it.</dd></div></dl>
+</div>
+</div>
+<ul class="notes">
+<li><strong>Five facts, four points.</strong> The facts named for S1 are five; rule 4 allows four. Full Disk Access moves to Install, where the reader acts on it.</li>
+<li><strong>The README comes first in two places.</strong> It holds no measured numbers: the speed figures live in <code>docs/store-format.md</code> (last table) and <code>HANDOFF.md</code> (task 12, the live probe). And it has snippets for opencode and Claude Code only; the Claude Desktop entry is new text. Rule 3 asks that both go into the README before the page quotes them.</li>
+<li><strong>Not offered until true:</strong> <code>cargo install importin</code>, which waits for the crates.io publish.</li>
+<li><strong>Proposed for the README, then the page:</strong> one line that read-only is not private. What importin returns goes to your agent's model; with a hosted model it leaves the Mac. <code>exclude_accounts</code> is the control for what the agent can see.</li>
+</ul>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>S1.</strong> Doctor and the keychain dialog are where a first run fails, and the name is what the piece draws. Every section stays a headline and at most four points; all three host snippets are visible at once, since tabs would hide two behind a switch (rule 5).</p></div>
+</article>
+<article class="dec" id="d6">
+<div class="dec-h"><span class="dnum">D6</span><h3>Where it lives</h3><span class="badge block">blocking</span></div>
+<p class="lede">GitHub Pages needs a public repository on glia-org's free plan (section 0). The three places differ in what has to become public, and in what the page can link to once it is live.</p>
+<div class="opts">
+<div class="opt" id="opt-H1">
+<div class="opt-h"><span class="oid">H1</span><h4><code>site/</code> in glia-org/importin</h4><span class="pill-rec">recommended</span><label class="pick"><input type="radio" name="d6" value="H1" checked> pick H1</label></div>
+<dl class="kv"><dt>URL</dt><dd><code>https://glia-org.github.io/importin/</code></dd>
+<dt>turns public</dt><dd>the code repository, its history included</dd>
+<dt>kept in step</dt><dd>one repository: a README change and the page change land in one commit; <code>tools/check.py</code> runs in CI</dd>
+<dt>before it goes live</dt><dd>Q2 answered; a <code>pages.yml</code> like Lemna's; Pages switched to GitHub Actions</dd>
+<dt>the page's links</dt><dd>the release zips and the source open for every reader</dd></dl>
+</div>
+<div class="opt" id="opt-H2">
+<div class="opt-h"><span class="oid">H2</span><h4>A separate repository</h4><label class="pick"><input type="radio" name="d6" value="H2"> pick H2</label></div>
+<dl class="kv"><dt>URL</dt><dd><code>https://glia-org.github.io/importin-site/</code>, since a project site takes its repository's name</dd>
+<dt>turns public</dt><dd>glia-org/importin-site only; the code stays private</dd>
+<dt>kept in step</dt><dd>two repositories; every README change copied by hand</dd>
+<dt>before it goes live</dt><dd>nothing</dd>
+<dt>the page's links</dt><dd>none a stranger can open: the release and the source are private, and crates.io is not published, so the page has no install path to offer</dd></dl>
+</div>
+<div class="opt" id="opt-H3">
+<div class="opt-h"><span class="oid">H3</span><h4>A folder in Glia's site</h4><label class="pick"><input type="radio" name="d6" value="H3"> pick H3</label></div>
+<dl class="kv"><dt>URL</dt><dd>as the repository is named, <code>https://glia-org.github.io/glia.github.io/importin/</code>; <code>/importin/</code> only after a rename to <code>glia-org.github.io</code></dd>
+<dt>turns public</dt><dd>glia-org/glia.github.io, private today</dd>
+<dt>kept in step</dt><dd>a shared repository, with Glia's rules and check script</dd>
+<dt>before it goes live</dt><dd>Glia's public release and the rename</dd>
+<dt>the page's links</dt><dd>as in H2 while importin stays private</dd></dl>
+</div>
+</div>
+<ul class="notes">
+<li><strong>Checked on 2026-11-06</strong> with <code>gh repo view</code> and <code>gh api</code>: glia-org/importin private, glia-org/lemna public with Pages live at <code>https://glia-org.github.io/lemna/</code>, glia-org/glia and glia-org/glia.github.io private, glia-org on plan <code>free</code>.</li>
+<li><strong>H3's name.</strong> GitHub serves an organisation's root site only from a repository named <code>&lt;org&gt;.github.io</code>, here <code>glia-org.github.io</code>. Glia's site README and its <code>check.py</code> assume <code>https://glia-org.github.io/</code>; the repository is named <code>glia.github.io</code>. That matters for Glia's own launch too.</li>
+<li><strong>The statistics are in more than one file.</strong> <code>docs/store-format.md</code> (the message, mailbox and account counts, and how many account labels resolved), <code>HANDOFF.md</code> (the message count, the account labels, a note on the excluded account) and <code>docs/sdd-ledger-2026-11-04.md</code> (the counts), and in the history since commit <code>aa3fbd9</code>. This panel names none of the values. Generalising today's files leaves them readable in old commits; taking them out of history means rewriting published commits, the <code>v0.1.0</code> tag included, and a force-push. That is Q2.</li>
+</ul>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>H1, once Q2 is answered.</strong> One repository keeps the page and the README in step, as Lemna's does, and a public repository is what makes the page's two links work: the release zips and the source. The workflow is Lemna's <code>pages.yml</code> with <code>path: site</code>.</p></div>
+</article>
+
+<article class="dec" id="d7">
+<div class="dec-h"><span class="dnum">D7</span><h3>Mark</h3></div>
+<p class="lede">Importin has no mark yet. Each option is drawn as inline SVG at 128 and 32 px, one colour (it takes the text colour or the accent), and at the 16 px a browser tab uses.</p>
+<div class="opts">
+<div class="opt" id="opt-M1">
+<div class="opt-h"><span class="oid">M1</span><h4>The pore ring</h4><span class="pill-rec">recommended</span><label class="pick"><input type="radio" name="d7" value="M1" checked> pick M1</label></div>
+<div class="marks">
+<figure><div class="tile"><svg viewBox="0 0 32 32" width="128" height="128" fill="currentColor" role="img" aria-label="M1 at 128 px"><g transform="translate(16 16)"><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(0)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(45)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(90)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(135)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(180)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(225)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(270)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(315)"/><circle r="3"/></g></svg></div><figcaption>128 px</figcaption></figure>
+<figure><div class="tile"><svg viewBox="0 0 32 32" width="32" height="32" fill="currentColor" role="img" aria-label="M1 at 32 px"><g transform="translate(16 16)"><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(0)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(45)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(90)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(135)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(180)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(225)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(270)"/><rect x="-3.3" y="-14" width="6.6" height="6.2" rx="2.4" transform="rotate(315)"/><circle r="3"/></g></svg></div><figcaption>32 px</figcaption></figure>
+<figure><div class="tile"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" shape-rendering="crispEdges" role="img" aria-label="M1 at 16 px, hinted"><rect x="6" y="1" width="4" height="2"/><rect x="6" y="13" width="4" height="2"/><rect x="1" y="6" width="2" height="4"/><rect x="13" y="6" width="2" height="4"/><rect x="3" y="3" width="2" height="2"/><rect x="11" y="3" width="2" height="2"/><rect x="3" y="11" width="2" height="2"/><rect x="11" y="11" width="2" height="2"/><rect x="7" y="7" width="2" height="2"/></svg></div><figcaption>16 px, hinted</figcaption></figure>
+<figure><div class="tile"><svg class="pxgrid" viewBox="0 0 16 16" width="64" height="64" fill="currentColor" shape-rendering="crispEdges" role="img" aria-label="The hinted 16 px form of M1 drawn four times as large, with its pixel grid"><rect x="6" y="1" width="4" height="2"/><rect x="6" y="13" width="4" height="2"/><rect x="1" y="6" width="2" height="4"/><rect x="13" y="6" width="2" height="4"/><rect x="3" y="3" width="2" height="2"/><rect x="11" y="3" width="2" height="2"/><rect x="3" y="11" width="2" height="2"/><rect x="11" y="11" width="2" height="2"/><rect x="7" y="7" width="2" height="2"/></svg></div><figcaption>the 16 px form, 4×</figcaption></figure>
+<figure><div class="tile"><svg viewBox="0 0 32 32" width="32" height="32" fill="currentColor" role="img" aria-label="Eight thin bars around a dot at 32 px, which reads as a sun"><g transform="translate(16 16)"><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(0)"/><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(45)"/><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(90)"/><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(135)"/><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(180)"/><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(225)"/><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(270)"/><rect x="-1.6" y="-14" width="3.2" height="6.6" rx="1.6" transform="rotate(315)"/><circle r="3.4"/></g></svg></div><figcaption>not this: thin bars read as a sun</figcaption></figure>
+</div>
+<div class="tabbar" role="img" aria-label="M1 as a favicon in a light and a dark browser tab">
+<div class="tabstrip l" aria-hidden="true"><span class="tb"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true"><rect x="6" y="1" width="4" height="2"/><rect x="6" y="13" width="4" height="2"/><rect x="1" y="6" width="2" height="4"/><rect x="13" y="6" width="2" height="4"/><rect x="3" y="3" width="2" height="2"/><rect x="11" y="3" width="2" height="2"/><rect x="3" y="11" width="2" height="2"/><rect x="11" y="11" width="2" height="2"/><rect x="7" y="7" width="2" height="2"/></svg>Importin, a read-only MCP server</span></div>
+<div class="tabstrip d" aria-hidden="true"><span class="tb"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true"><rect x="6" y="1" width="4" height="2"/><rect x="6" y="13" width="4" height="2"/><rect x="1" y="6" width="2" height="4"/><rect x="13" y="6" width="2" height="4"/><rect x="3" y="3" width="2" height="2"/><rect x="11" y="3" width="2" height="2"/><rect x="3" y="11" width="2" height="2"/><rect x="11" y="11" width="2" height="2"/><rect x="7" y="7" width="2" height="2"/></svg>Importin, a read-only MCP server</span></div>
+</div>
+<p>A circle of eight short bars, the nuclear pore's eightfold symmetry, around a dot: the cargo in the channel. The bars are short, wide and close together, so the eight read as one ring, as the subunits do in the piece; drawn thin and long they read as a sun. At 16 px a hinted form keeps the bars on whole pixels.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Reads at 16 px; says the name; no envelope.</dd></div><div class="w"><dt>Weakness</dt><dd>Abstract until the page has explained it. Any ring of eight can pass for a loading spinner, so it never rotates and never animates.</dd></div></dl>
+</div>
+<div class="opt" id="opt-M2">
+<div class="opt-h"><span class="oid">M2</span><h4>An envelope with a tag</h4><label class="pick"><input type="radio" name="d7" value="M2"> pick M2</label></div>
+<div class="marks">
+<figure><div class="tile"><svg viewBox="0 0 32 32" width="128" height="128" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="M2 at 128 px"><rect x="3" y="10" width="21" height="15" rx="2"/><path d="M4.5 11.5 13.5 18.5 22.5 11.5"/><path d="M22 12.5 25.5 8.5"/><rect x="23.5" y="3" width="6.5" height="5" rx="1.2" fill="currentColor" stroke="none" transform="rotate(-25 26.75 5.5)"/></svg></div><figcaption>128 px</figcaption></figure>
+<figure><div class="tile"><svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="M2 at 32 px"><rect x="3" y="10" width="21" height="15" rx="2"/><path d="M4.5 11.5 13.5 18.5 22.5 11.5"/><path d="M22 12.5 25.5 8.5"/><rect x="23.5" y="3" width="6.5" height="5" rx="1.2" fill="currentColor" stroke="none" transform="rotate(-25 26.75 5.5)"/></svg></div><figcaption>32 px</figcaption></figure>
+<figure><div class="tile"><svg viewBox="0 0 32 32" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" role="img" aria-label="M2 at 16 px"><rect x="3" y="10" width="21" height="15" rx="2"/><path d="M4.5 11.5 13.5 18.5 22.5 11.5"/><path d="M22 12.5 25.5 8.5"/><rect x="23.5" y="3" width="6.5" height="5" rx="1.2" fill="currentColor" stroke="none" transform="rotate(-25 26.75 5.5)"/></svg></div><figcaption>16 px</figcaption></figure>
+</div>
+<p>An envelope with a small address tag on a string.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Says mail at once.</dd></div><div class="w"><dt>Weakness</dt><dd>The mail-app cliché. At 16 px the tag merges with the flap. Says nothing of the name or of read-only.</dd></div></dl>
+</div>
+<div class="opt" id="opt-M3">
+<div class="opt-h"><span class="oid">M3</span><h4>Wordmark only</h4><label class="pick"><input type="radio" name="d7" value="M3"> pick M3</label></div>
+<div class="marks">
+<figure><div class="tile"><svg viewBox="0 0 112 32" width="128" height="37" role="img" aria-label="M3 at 128 px wide"><text x="56" y="22.5" text-anchor="middle" style="font-family:var(--serif);font-size:25px" fill="currentColor">importin</text></svg></div><figcaption>128 px wide</figcaption></figure>
+<figure><div class="tile"><svg viewBox="0 0 112 32" width="32" height="9" role="img" aria-label="M3 at 32 px wide"><text x="56" y="22.5" text-anchor="middle" style="font-family:var(--serif);font-size:25px" fill="currentColor">importin</text></svg></div><figcaption>32 px wide</figcaption></figure>
+</div>
+<p>The word “importin” in the page's face, no symbol.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Nothing to explain; nothing to draw.</dd></div><div class="w"><dt>Weakness</dt><dd>No favicon: at 32 px wide the word is about 6 px tall. A tab would need a letter instead, which is a second mark.</dd></div></dl>
+</div>
+</div>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>M1.</strong> It reads at 16 px in its hinted form, says the name, and avoids the envelope cliché. One colour, so it follows the page by day and by night.</p></div>
+</article>
+
+<article class="dec" id="d8">
+<div class="dec-h"><span class="dnum">D8</span><h3>Pictures of the real thing</h3></div>
+<p class="lede">Whether the page shows an agent using Importin in a real host. The terminals below are drawn; none is a capture.</p>
+<div class="opts">
+<div class="opt" id="opt-R1">
+<div class="opt-h"><span class="oid">R1</span><h4>A real screenshot</h4><label class="pick"><input type="radio" name="d8" value="R1"> pick R1</label></div>
+<div class="term" role="img" aria-label="Placeholder for a real capture of opencode"><div class="tbar" aria-hidden="true"><i></i><i></i><i></i>&nbsp;opencode</div><div class="hatch" aria-hidden="true">a real capture of opencode answering a mail question, with importin pointed at the synthetic test store</div></div>
+<p>One capture of opencode's TUI, the <code>mail</code> agent answering a question. Needs a staged session: importin pointed at the test fixture's store with <code>IMPORTIN_MAIL_ROOT</code> and <code>IMPORTIN_ACCOUNTS_DB</code>, a fixed window size, one question.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Shows it working in a real host.</dd></div><div class="w"><dt>Weakness</dt><dd>Staging costs a session; the capture ages with each opencode release; every frame has to be checked for real names (Q3).</dd></div></dl>
+</div>
+<div class="opt" id="opt-R2">
+<div class="opt-h"><span class="oid">R2</span><h4>A drawn stand-in, labelled</h4><span class="pill-rec">recommended now</span><label class="pick"><input type="radio" name="d8" value="R2" checked> pick R2</label></div>
+<div class="term" role="img" aria-label="A drawn terminal, labelled as a stand-in: a question about who was in Cc, two tool calls, and the answer naming Erika Muster and the lab office"><div class="tbar" aria-hidden="true"><i></i><i></i><i></i>&nbsp;opencode, agent mail</div><div class="tbody flow" aria-hidden="true"><div class="u">› Who was in Cc on the budget draft from Max Mustermann?</div>
+<div class="call"><span class="t">mail_search</span> {"query": "budget", "from": "mustermann"}</div>
+<div class="call"><span class="t">mail_get_email</span> {"id": 4182}</div>
+<div class="ans">Erika Muster was in To and the lab office (office@example.org) in Cc on “Budget 2027, second draft”, 14 October 2026. The message was S/MIME-encrypted; it was decrypted for this answer.</div></div><span class="label" aria-hidden="true">drawn stand-in</span></div>
+<p>The terminal drawn in HTML and CSS and labelled as a stand-in, as Glia's page does until its clip exists. In opencode the tools appear as <code>mail_*</code>, after the server key <code>mail</code>.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Free of real data by construction; costs nothing to keep current.</dd></div><div class="w"><dt>Weakness</dt><dd>A drawing proves nothing; the label stays until R1 replaces it.</dd></div></dl>
+</div>
+<div class="opt" id="opt-R3">
+<div class="opt-h"><span class="oid">R3</span><h4>None</h4><label class="pick"><input type="radio" name="d8" value="R3"> pick R3</label></div>
+<div class="term" role="img" aria-label="An empty frame: no picture of a host"><div class="tbar" aria-hidden="true"><i></i><i></i><i></i></div><div class="hatch" aria-hidden="true">no picture; the transcript (B or P2) stands for it</div></div>
+<p>No picture of a host. The transcript of B or P2 shows the tools instead.</p>
+<dl class="sw"><div class="s"><dt>Strength</dt><dd>Nothing to stage or keep current.</dd></div><div class="w"><dt>Weakness</dt><dd>A reader never sees an agent use it: the page shows the tools, not an answer.</dd></div></dl>
+</div>
+</div>
+<div class="rec"><div class="rec-label">Recommendation</div>
+<p><strong>R2 now, R1 before publishing</strong>, as Glia did: the stand-in carries its label until a real capture on the synthetic store replaces it, if Q3 allows one.</p></div>
+</article>
+</section>
+
+<section id="s2"><h2>2. Fixed, whatever the picks</h2>
+<p class="lede">The family's rules (glia's site README, rules 1–8), restated for this page. They go into the site README with the picks.</p>
+<ul class="fixed">
+<li><strong>Plain static files</strong> in <code>site/</code>: no build step, no framework, no package manager.</li>
+<li><strong>No third-party requests.</strong> Fonts self-hosted with their licence text; no CDN, analytics, cookies or embeds; external URLs only as links. <code>tools/check.py</code>, adapted from glia's, enforces it, and also checks local references, unique ids, element nesting and the D4 contrast floors.</li>
+<li><strong>Every claim true of the build as released</strong> (v0.1.0 today). Numbers say where they were measured. What is not built or not published is not offered, such as <code>cargo install importin</code>; gaps are named, such as signatures that are not verified. No superlatives, no exclamation marks.</li>
+<li><strong>Plain and precise wording.</strong> Descriptive headlines; per section a headline and at most four points; no slogans; no text on how to use the page.</li>
+<li><strong>Nothing hidden behind a switch.</strong> All three host snippets are visible at once; depth lives in the linked README and DESIGN.md.</li>
+<li><strong>No real mail on the page.</strong> No message, address, mailbox name or count from the author's store. Examples are synthetic (Erika Muster, Max Mustermann, <code>example.org</code>, INBOX, dates in 2026), and replies are produced from the test store.</li>
+<li><strong>Complete without JavaScript.</strong> The piece is SVG and CSS; P2, if built, is radio buttons and CSS.</li>
+<li><strong>Reduced motion honoured.</strong> The piece stands still; a pause control serves everyone else.</li>
+<li><strong>Phones get one column</strong>, with 16 px gutters.</li>
+<li><strong>Licences in the footer:</strong> Apache-2.0 for the site and the code; the font's licence (Literata, SIL Open Font License 1.1), its text served beside the font.</li>
+<li><strong>Importin's own look</strong>, glia's rule 8 for this page: the picks of D2, D4 and D7.</li>
+</ul>
+</section>
+
+<section id="s3"><h2>3. Open questions for the user</h2>
+<ul class="qs">
+<li id="q1"><strong>Q1.</strong> Make glia-org/importin public now? GitHub Pages needs it on the free plan (D6, H1), and it is also what lets a stranger download a release or read the source. If not now: after Q2, or with the crates.io publish?</li>
+<li id="q2"><strong>Q2.</strong> May the store statistics stay as they are? They are in <code>docs/store-format.md</code> (the message, mailbox and account counts, and how many account labels resolved), <code>HANDOFF.md</code> (the message count, the account labels, a note on the excluded account) and <code>docs/sdd-ledger-2026-11-04.md</code> (the counts), and in the history since <code>aa3fbd9</code>. Possible answers: (a) they stay; (b) generalise today's files and accept that old commits keep them; (c) generalise and rewrite history, which changes published commits and the <code>v0.1.0</code> tag and needs a force-push; (d) publish the code from one squashed commit in a fresh public repository.</li>
+<li id="q3"><strong>Q3.</strong> May a real screenshot (R1) be staged: opencode with the <code>mail</code> agent and importin pointed at the synthetic test store, one question, one capture, checked frame by frame before it goes on the page?</li>
+<li id="q4"><strong>Q4.</strong> May the speed figures name the size of the store they were measured on, the message count in <code>docs/store-format.md</code>, rounded? It is a count from your store, which the page otherwise leaves out; without it the numbers lack “where measured”. The alternative is a measurement on a synthetic store of 100 000 messages, the size DESIGN.md states its budgets for, quoted instead. This panel leaves the count out until you answer.</li>
+</ul>
+</section>
+
+<section id="s4"><h2>4. Build order with the recommended picks, each with its check</h2>
+<ol class="order">
+<li><strong><code>site/</code> skeleton and <code>tools/check.py</code>.</strong> <code>index.html</code> with the S1 sections as headings, <code>site.css</code>, the font and its licence, <code>.nojekyll</code>; the check script adapted from glia's. <span class="chk">Check: the script passes; the page reads complete with JavaScript off; the browser's network list shows only files from <code>site/</code>.</span></li>
+<li><strong>Mark (M1)</strong> at 128, 32 and the hinted 16 px; <code>favicon.svg</code>. <span class="chk">Check: legible in Safari's and Chrome's tab bars, light and dark; one colour; never animated.</span></li>
+<li><strong>The pore piece (P1)</strong>: inline SVG, CSS keyframes, the still, the pause control, one line of alternative text. <span class="chk">Check: no script involved; reduced motion shows the still; the pause control works from the keyboard; under 20 kB; no layout shift while it loads; nothing flashes.</span></li>
+<li><strong>Sections and copy from the README (S1).</strong> First the README additions: the measured numbers with where (and Q4's answer), the Claude Desktop entry, and the line that read-only is not private if you want it. <span class="chk">Check: every sentence traced to README or DESIGN.md in a table in the site README, as glia's does; at most four points per section; a grep finds no address outside <code>example.org</code> and no mailbox name or count from the real store.</span></li>
+<li><strong>Palette and dark mode (C1)</strong> as D4's custom properties. <span class="chk">Check: <code>check.py</code> recomputes every pair of the D4 table from <code>site.css</code> and fails below 4.5:1 for text and 3:1 for drawing strokes.</span></li>
+<li><strong><code>pages.yml</code></strong>: Lemna's workflow with <code>path: site</code>. <span class="chk">Check: it runs green on a push that touches <code>site/</code>; Pages source set to GitHub Actions, which needs the public repository.</span></li>
+<li><strong>Review</strong> in Safari, Chrome and Firefox, on a phone, with JavaScript off, with reduced motion, in both appearances. <span class="chk">Check: a “Before publishing” list in the site README, ticked, as glia's is.</span></li>
+<li><strong>Publish once D6 is settled</strong> (Q1, Q2). <span class="chk">Check: <code>https://glia-org.github.io/importin/</code> serves the page; the release and source links open for a reader who is not logged in.</span></li>
+</ol>
+<p class="note">The picks and the rules go into the site README, like glia's; DESIGN.md gets one line that points there, since the site is not part of the server.</p>
+</section>
+
+<div class="picks" aria-live="polite">
+<span class="box-title">Your picks</span>
+<code id="pickline">A V2 P1 C1 S1 H1 M1 R2</code>
+<span class="hint">One id per decision, D1 to D8; the radio buttons change it.</span>
+<button type="button" id="copy" hidden>Copy</button>
+</div>
+</main>
+<script>
+(function(){
+  var names=['d1','d2','d3','d4','d5','d6','d7','d8'];
+  var line=document.getElementById('pickline');
+  function update(){
+    line.textContent=names.map(function(n){
+      var i=document.querySelector('input[name="'+n+'"]:checked');
+      return i?i.value:'–';
+    }).join(' ');
+  }
+  document.querySelectorAll('.pick input').forEach(function(i){i.addEventListener('change',update);});
+  var b=document.getElementById('copy');
+  if(navigator.clipboard){
+    b.hidden=false;
+    b.addEventListener('click',function(){
+      navigator.clipboard.writeText(line.textContent).then(function(){
+        b.textContent='Copied';
+        setTimeout(function(){b.textContent='Copy';},1500);
+      });
+    });
+  }
+  update();
+})();
+</script>
+</body>
+</html>
