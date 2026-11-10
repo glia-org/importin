@@ -24,7 +24,7 @@ cargo install --path .     # from this checkout, into ~/.cargo/bin/importin
 cargo install importin     # once it is published on crates.io
 ```
 
-Or take a release binary, once `glia-org/importin` has a release: each `v*` tag carries
+Or take a release binary: each `v*` tag carries
 `importin-<tag>-<target>.zip` (binary, README, LICENSE) for `aarch64-apple-darwin` (Apple Silicon) and
 `x86_64-apple-darwin` (Intel). Download it from the release page or with `gh`, unzip it, clear the
 quarantine flag and put it on your `PATH`. The flag matters because the binary is not notarised: notarisation
