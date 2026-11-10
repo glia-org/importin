@@ -2,7 +2,7 @@
 
 ## State (2026-11-05)
 
-Branch `main`, pushed to `github.com/glia-org/importin` (private), CI green, tag `v0.1.0` builds the
+Branch `main`, pushed to `github.com/glia-org/importin` (public, Pages on), CI green, tag `v0.1.0` builds the
 release zips. In use: `~/.cargo/bin/importin` serves the opencode `mail` agent. On 2026-11-05 the open
 items below were closed (sparse xlsx reading, 20 s limits on pdf and spreadsheet parsing, xls/ods no
 longer read, Unicode case folding in header search, `.emlx` preferred over `.partial.emlx`, `strip_html`
