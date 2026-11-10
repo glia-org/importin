@@ -35,14 +35,14 @@ pre code{font-size:inherit;background:none;padding:0;border-radius:0;overflow-wr
 
 .wrap{max-width:1200px;margin:0 auto;padding-left:var(--gut);padding-right:var(--gut)}
 
-/* header: the mark (M1) beside the wordmark; it stays at the top (S3), with a hairline below once the page has
+/* header: the mark (K7) beside the wordmark; it stays at the top (S3), with a hairline below once the page has
    scrolled (where scroll timelines exist) */
 .top{position:sticky;top:0;z-index:3;background:var(--ground);display:flex;align-items:center;
   justify-content:space-between;gap:16px;padding-top:28px;padding-bottom:28px}
 .top::after{content:"";position:absolute;left:var(--gut);right:var(--gut);bottom:0;height:1px;background:var(--line);
   opacity:0}
 .brand{display:flex;align-items:center;gap:12px;font-size:22px;line-height:1;color:var(--text);letter-spacing:.01em}
-.brand svg{display:block;fill:var(--accent)}
+.brand svg{display:block;color:var(--accent)}
 .top nav{display:flex;gap:24px;font-size:16px}
 
 /* lead */

@@ -12,8 +12,8 @@ do, how to install it and add it to an MCP host. Plain static files, served by G
 | `assets/site.css` | the look, the pore's keyframes and the sticky header |
 | `assets/site.js` | play in the pore (I3 + chase) and faint one-colour letters that drift in from the window's sides and rise like balloons, bumping off each other, and are pulled into the pore when it scrolls back into view (S3); eight earned arrivals light the ring and set off a short display; plain ES2020, no library, loaded with `defer`. The page is complete without it: the keyframes run and the pause control pauses them |
 | `assets/fonts/literata-latin.woff2`, `assets/fonts/OFL.txt` | Literata, its Latin characters (the file Lemna's page serves), with its licence |
-| `assets/favicon.svg` | the mark (M1) in its hinted 16 px form, in the accent: `#97a2ff` in a dark tab bar, `#4a3d9a` in a light one |
-| `assets/apple-touch-icon.png` | the mark at 180 × 180 px on the page's ground, rendered with headless Chrome (`--screenshot --window-size=180,180`) from the 32-unit form used in the header |
+| `assets/favicon.svg` | the mark (K7) in the accent, `#97a2ff` in a dark tab bar and `#4a3d9a` in a light one: its pixel-snapped 16 px form, a closed octagonal ring, below 24 px, and the 32-unit drawing of eight facets from 24 px up (a media query on the image's size) |
+| `assets/apple-touch-icon.png` | the mark at 120 px, centred on 180 × 180 px of the page's ground, rendered with headless Chrome (`--screenshot --window-size=180,180`) from the 32-unit form used in the header |
 | `.nojekyll` | tells GitHub Pages to serve the files as they are |
 | `../checks/site.py` | the checks below; run before every commit that touches `site/` |
 | `../.github/workflows/pages.yml` | publishes `site/` on every push to `main` that touches it, once Pages is switched on |
@@ -53,7 +53,8 @@ The family's rules (glia's site README, rules 1–8), as they apply to this page
 
 `A V2 P1 C2 S1 H1 M1 R2` + I3 chase S3, chosen by the maintainer on 2026-11-06, the first eight from
 `docs/design-panel-website-2026-11-06.html`, which shows each option, its mockup and its trade-offs; the last three
-amend decision 12 in `DESIGN.md`.
+amend decision 12 in `DESIGN.md`. On 2026-11-10 the maintainer replaced M1 with K7 from
+`docs/design-panel-mark-2026-11-10.html`.
 
 | | picked |
 |---|---|
@@ -63,7 +64,7 @@ amend decision 12 in `DESIGN.md`.
 | C2 | dark only, the panel's night palette: ground `#13131b`, surface `#1c1b26`, text `#e9e7f2`, copy `#b2afc4`, muted `#8a879c`, accent `#97a2ff`, membrane `#6c6794`, fills `#1f1a26` and `#191a2c`, hairline `#2d2c3a` |
 | S1 | the full set of sections: lead, the piece, how it works, the six tools, S/MIME, read-only (and that read-only is not private), install for opencode, Claude Code and Claude Desktop, measured times, the name |
 | H1 | `site/` in glia-org/importin, published by `.github/workflows/pages.yml` (Lemna's, with `actions/checkout@v5`) |
-| M1 | the pore ring, eight short bars around a dot, one colour; the mark itself never turns |
+| K7 | the mark: the octagonal ring of eight facets, one at 12 o'clock as in the pore, one colour; at 16 px a closed octagonal ring; the mark itself never turns. Chosen 2026-11-10 from `docs/design-panel-mark-2026-11-10.html`; it replaced M1, eight short bars around a dot |
 | R2 | pictures of the real thing are drawn stand-ins, labelled as such: one drawn opencode transcript, captioned "Drawn example, synthetic data" |
 | I3 | play in the pore: a click or tap in the cytoplasm places a letter that an importin walks over to and carries in, any letter can be dragged, and one already inside stops at the pore when pulled outward, so the way through is one way |
 | chase | free letters move away from a moving mouse or pen, faster the longer it keeps closing in, stay in the cytoplasm, and an importin takes any herded within reach of the pore |
