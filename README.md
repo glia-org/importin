@@ -1,4 +1,13 @@
-# Importin
+<h1><img src="site/assets/favicon.svg" width="56" height="56" alt="" align="absmiddle"> Importin</h1>
+
+<p>
+  <a href="https://github.com/glia-org/importin/actions/workflows/ci.yml"><img src="https://github.com/glia-org/importin/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
+  <a href="https://github.com/glia-org/importin/actions/workflows/pages.yml"><img src="https://github.com/glia-org/importin/actions/workflows/pages.yml/badge.svg" alt="pages"></a>
+</p>
+
+<p>Download: <a href="https://github.com/glia-org/importin/releases/latest">latest release, macOS binaries</a> · The page: <a href="https://glia-org.github.io/importin/">glia-org.github.io/importin</a></p>
+
+<p><img src="docs/readme-hero.svg" alt="Drawing: a nuclear pore seen from the cytoplasm, a ring of eight subunits among smaller pores. Four letters, each with an address tag and held by an importin, move in toward the centre and pass through the pore one after another. Nothing moves outward."></p>
 
 A read-only MCP server for Apple Mail. Importin reads what Mail.app already keeps on your Mac, the
 Envelope Index (SQLite) and the `.emlx` message files, and gives an AI agent six tools: find messages by
@@ -232,7 +241,7 @@ leaves the Mac. An account listed in `exclude_accounts` is invisible to every to
 | `tests/` | integration tests on a synthetic Mail store built at test time (`tests/support/fixture.rs`); `readonly.rs` greps `src/` for write paths |
 | `checks/budgets.sh` | the latency budgets, release build, 2 000-message fixture |
 | `checks/measure.sh` | the figures under Measured, release build, 100 000-message fixture |
-| `docs/` | the store format notes, the design panel, the implementation plan |
+| `docs/` | the store format notes, the design panel, the implementation plan, `readme-hero.svg` (the page's pore at the top of this README) |
 
 ## More
 

@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-380 -140 760 280" width="1200" height="442" role="img" aria-label="Drawing: a nuclear pore seen from the cytoplasm, a ring of eight subunits among smaller pores. Four letters, each with an address tag and held by an importin, move in toward the centre and pass through the pore one after another. Nothing moves outward.">
+<!-- The pore from site/index.html with its keyframes from site/assets/site.css, self-contained for the README. -->
+<style>
+.p-field{fill:#1f1a26;stroke:#2d2c3a;stroke-width:1}
+.p-rim{fill:none;stroke:#6c6794;stroke-width:1.2}
+.p-chan{fill:#191a2c;stroke:#6c6794;stroke-width:1.2}
+.p-mesh{fill:none;stroke:#6c6794;stroke-width:.9;opacity:.6}
+.p-sub{fill:#13131b;stroke:#6c6794;stroke-width:2}
+.p-far{opacity:.4}
+.p-imp{fill:none;stroke:#97a2ff;stroke-width:3.4;stroke-linecap:round}
+.p-box{fill:#13131b;stroke:#e9e7f2;stroke-width:1.4}
+.p-flap{fill:none;stroke:#e9e7f2;stroke-width:1.2;stroke-linejoin:round}
+.p-str{fill:none;stroke:#97a2ff;stroke-width:1.1}
+.p-tag{fill:#97a2ff}
+.p-rel{fill:#97a2ff;opacity:0}
+.cargo,.p-rel{animation-duration:10s;animation-timing-function:linear;animation-iteration-count:infinite;animation-fill-mode:both}
+.c1{animation-name:k1}.c2{animation-name:k2}.c3{animation-name:k3}.c4{animation-name:k4}
+.p-rel{animation-name:rel}
+.c1,.r1{animation-delay:-3s}.c2,.r2{animation-delay:-5.5s}.c3,.r3{animation-delay:-7.2s}.c4,.r4{animation-delay:-9s}
+@keyframes rel{0%,84%{transform:scale(.3);opacity:0}89%{transform:scale(1);opacity:.9}100%{transform:scale(2.6);opacity:0}}
+@keyframes k1{0%{transform:translate(-275px,-25px) rotate(0deg) scale(1);opacity:0}6%{transform:translate(-266px,-33px) rotate(3deg) scale(1);opacity:1}12%{transform:translate(-251px,-44px) rotate(5deg) scale(1)}18%{transform:translate(-234px,-55px) rotate(6deg) scale(1)}24%{transform:translate(-216px,-65px) rotate(6deg) scale(1)}30%{transform:translate(-196px,-72px) rotate(5deg) scale(1)}36%{transform:translate(-175px,-76px) rotate(3deg) scale(1)}42%{transform:translate(-153px,-77px) rotate(0deg) scale(1)}48%{transform:translate(-131px,-75px) rotate(-3deg) scale(1)}54%{transform:translate(-109px,-69px) rotate(-5deg) scale(1)}60%{transform:translate(-86px,-60px) rotate(-6deg) scale(.95)}66%{transform:translate(-64px,-48px) rotate(-6deg) scale(.87)}72%{transform:translate(-42px,-34px) rotate(-5deg) scale(.79)}78%{transform:translate(-21px,-18px) rotate(-3deg) scale(.71)}84%{transform:translate(0,0) rotate(0deg) scale(.62);opacity:1}90%{transform:translate(0,0) rotate(0deg) scale(.34);opacity:.85}95%{transform:translate(0,0) rotate(0deg) scale(.16);opacity:.45}100%{transform:translate(0,0) rotate(0deg) scale(.05);opacity:0}}
+@keyframes k2{0%{transform:translate(150px,-180px) rotate(0deg) scale(1);opacity:0}6%{transform:translate(153px,-173px) rotate(3deg) scale(1);opacity:1}12%{transform:translate(157px,-162px) rotate(5deg) scale(1)}18%{transform:translate(159px,-150px) rotate(6deg) scale(1)}24%{transform:translate(159px,-138px) rotate(6deg) scale(1)}30%{transform:translate(155px,-125px) rotate(5deg) scale(1)}36%{transform:translate(148px,-113px) rotate(3deg) scale(1)}42%{transform:translate(137px,-101px) rotate(0deg) scale(1)}48%{transform:translate(123px,-89px) rotate(-3deg) scale(1)}54%{transform:translate(106px,-77px) rotate(-5deg) scale(1)}60%{transform:translate(86px,-65px) rotate(-6deg) scale(.96)}66%{transform:translate(65px,-51px) rotate(-6deg) scale(.88)}72%{transform:translate(42px,-37px) rotate(-5deg) scale(.8)}78%{transform:translate(20px,-20px) rotate(-3deg) scale(.71)}84%{transform:translate(0,0) rotate(0deg) scale(.62);opacity:1}90%{transform:translate(0,0) rotate(0deg) scale(.34);opacity:.85}95%{transform:translate(0,0) rotate(0deg) scale(.16);opacity:.45}100%{transform:translate(0,0) rotate(0deg) scale(.05);opacity:0}}
+@keyframes k3{0%{transform:translate(-118px,180px) rotate(0deg) scale(1);opacity:0}6%{transform:translate(-121px,172px) rotate(3deg) scale(1);opacity:1}12%{transform:translate(-123px,160px) rotate(5deg) scale(1)}18%{transform:translate(-125px,148px) rotate(6deg) scale(1)}24%{transform:translate(-124px,135px) rotate(6deg) scale(1)}30%{transform:translate(-121px,122px) rotate(5deg) scale(1)}36%{transform:translate(-116px,109px) rotate(3deg) scale(1)}42%{transform:translate(-107px,97px) rotate(0deg) scale(1)}48%{transform:translate(-96px,85px) rotate(-3deg) scale(1)}54%{transform:translate(-83px,74px) rotate(-5deg) scale(.97)}60%{transform:translate(-67px,62px) rotate(-6deg) scale(.91)}66%{transform:translate(-51px,49px) rotate(-6deg) scale(.84)}72%{transform:translate(-33px,35px) rotate(-5deg) scale(.77)}78%{transform:translate(-16px,19px) rotate(-3deg) scale(.7)}84%{transform:translate(0,0) rotate(0deg) scale(.62);opacity:1}90%{transform:translate(0,0) rotate(0deg) scale(.34);opacity:.85}95%{transform:translate(0,0) rotate(0deg) scale(.16);opacity:.45}100%{transform:translate(0,0) rotate(0deg) scale(.05);opacity:0}}
+@keyframes k4{0%{transform:translate(280px,42px) rotate(0deg) scale(1);opacity:0}6%{transform:translate(271px,48px) rotate(3deg) scale(1);opacity:1}12%{transform:translate(257px,55px) rotate(5deg) scale(1)}18%{transform:translate(240px,62px) rotate(6deg) scale(1)}24%{transform:translate(220px,68px) rotate(6deg) scale(1)}30%{transform:translate(200px,72px) rotate(5deg) scale(1)}36%{transform:translate(178px,74px) rotate(3deg) scale(1)}42%{transform:translate(155px,73px) rotate(0deg) scale(1)}48%{transform:translate(132px,69px) rotate(-3deg) scale(1)}54%{transform:translate(108px,62px) rotate(-5deg) scale(1)}60%{transform:translate(85px,53px) rotate(-6deg) scale(.94)}66%{transform:translate(62px,42px) rotate(-6deg) scale(.86)}72%{transform:translate(40px,29px) rotate(-5deg) scale(.78)}78%{transform:translate(19px,15px) rotate(-3deg) scale(.7)}84%{transform:translate(0,0) rotate(0deg) scale(.62);opacity:1}90%{transform:translate(0,0) rotate(0deg) scale(.34);opacity:.85}95%{transform:translate(0,0) rotate(0deg) scale(.16);opacity:.45}100%{transform:translate(0,0) rotate(0deg) scale(.05);opacity:0}}
+@media (prefers-reduced-motion:reduce){.cargo,.p-rel{animation-play-state:paused}}
+</style>
+      <defs>
+        <rect id="p-sb" x="-12" y="-86" width="24" height="40" rx="10"/>
+        <path id="p-fg" d="M0-50q5 7 0 13t0 13t0 11"/>
+        <g id="p-np">
+          <circle class="p-rim" r="94"/>
+          <circle class="p-chan" r="52"/>
+          <use href="#p-fgs"/>
+          <use href="#p-sbs"/>
+        </g>
+        <g id="p-fgs" class="p-mesh"><use href="#p-fg" transform="rotate(22.5)"/><use href="#p-fg" transform="rotate(67.5)"/><use href="#p-fg" transform="rotate(112.5)"/><use href="#p-fg" transform="rotate(157.5)"/><use href="#p-fg" transform="rotate(202.5)"/><use href="#p-fg" transform="rotate(247.5)"/><use href="#p-fg" transform="rotate(292.5)"/><use href="#p-fg" transform="rotate(337.5)"/></g>
+        <g id="p-sbs" class="p-sub"><use href="#p-sb"/><use href="#p-sb" transform="rotate(45)"/><use href="#p-sb" transform="rotate(90)"/><use href="#p-sb" transform="rotate(135)"/><use href="#p-sb" transform="rotate(180)"/><use href="#p-sb" transform="rotate(225)"/><use href="#p-sb" transform="rotate(270)"/><use href="#p-sb" transform="rotate(315)"/></g>
+        <g id="p-env" transform="scale(1.2)"><path class="p-imp" d="M-16.5-1C-17.5 14-9 18.5 0 18.5 9 18.5 17.5 14 16.5-1"/><rect class="p-box" x="-12" y="-8" width="24" height="16" rx="2"/><path class="p-flap" d="M-11.5-7.2 0 1.2 11.5-7.2"/><path class="p-str" d="M9-5.5 14.5-12"/><rect class="p-tag" x="12.5" y="-17.5" width="8" height="5.5" rx="1.4" transform="rotate(-30 16.5 -14.75)"/></g>
+      </defs>
+      <rect class="p-field" x="-379.5" y="-139.5" width="759" height="279" rx="9"/>
+      <g class="p-far">
+        <use href="#p-np" transform="translate(-318 88) scale(.3)"/>
+        <use href="#p-np" transform="translate(-292 -96) scale(.2)"/>
+        <use href="#p-np" transform="translate(-196 104) scale(.24)"/>
+        <use href="#p-np" transform="translate(-84 -120) scale(.15)"/>
+        <use href="#p-np" transform="translate(126 116) scale(.16)"/>
+        <use href="#p-np" transform="translate(212 -92) scale(.22)"/>
+        <use href="#p-np" transform="translate(322 -38) scale(.26)"/>
+        <use href="#p-np" transform="translate(300 106) scale(.2)"/>
+      </g>
+      <circle class="p-rim" r="94"/><circle class="p-chan" r="52"/><use class="p-swirl" href="#p-fgs"/><use class="p-subs" href="#p-sbs"/>
+      <circle class="p-rel r1" r="5"/><circle class="p-rel r2" r="5"/><circle class="p-rel r3" r="5"/><circle class="p-rel r4" r="5"/>
+      <use class="cargo c1" href="#p-env"/><use class="cargo c2" href="#p-env"/><use class="cargo c3" href="#p-env"/><use class="cargo c4" href="#p-env"/>
+</svg>
